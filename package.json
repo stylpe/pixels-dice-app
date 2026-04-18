@@ -13,6 +13,7 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "full-validate": "pnpm check && pnpm test && pnpm build",
     "test:e2e": "playwright test",
     "playwright:install": "playwright install chromium"
   },
