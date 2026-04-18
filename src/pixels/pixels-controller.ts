@@ -12,6 +12,11 @@ import {
   type PocSessionState,
   registerPocDie,
   registerPocRoll,
+  setAttackDamageBonus,
+  setAttackMode,
+  setCriticalHitLocationRoll,
+  setDefenderSuccessLevels,
+  setOpposed,
   setPocTarget,
 } from "../wfrp/poc-session";
 
@@ -35,6 +40,11 @@ type AppState = {
   busy: boolean;
   capabilities: BluetoothCapabilities;
   target: number;
+  attackMode: boolean;
+  damageBonus: number;
+  isOpposed: boolean;
+  defenderSuccessLevels: number;
+  criticalHitLocationRoll: number | null;
   session: PocSessionState;
   latestResult: PocResult | null;
   tensDie: DieSlotState;
@@ -60,6 +70,11 @@ export class PixelsController {
     busy: false,
     capabilities: getBluetoothCapabilities(),
     target: 50,
+    attackMode: false,
+    damageBonus: 0,
+    isOpposed: false,
+    defenderSuccessLevels: 0,
+    criticalHitLocationRoll: null,
     session: createPocSessionState(),
     latestResult: null,
     tensDie: emptyDieSlot("tens"),
@@ -82,14 +97,36 @@ export class PixelsController {
   setTarget(target: number) {
     const safeTarget = clampTarget(target);
     const session = setPocTarget(this.state.session, safeTarget);
-    const latestResult = this.state.latestResult
-      ? {
-          ...this.state.latestResult,
-          target: safeTarget,
-        }
-      : null;
+    this.applySession(session);
+  }
 
-    this.patch({ target: safeTarget, session, latestResult });
+  setAttackMode(enabled: boolean) {
+    this.applySession(setAttackMode(this.state.session, enabled));
+  }
+
+  setAttackDamageBonus(damageBonus: number) {
+    this.applySession(
+      setAttackDamageBonus(this.state.session, clampSignedNumber(damageBonus)),
+    );
+  }
+
+  setOpposed(isOpposed: boolean) {
+    this.applySession(setOpposed(this.state.session, isOpposed));
+  }
+
+  setDefenderSuccessLevels(defenderSuccessLevels: number) {
+    this.applySession(
+      setDefenderSuccessLevels(
+        this.state.session,
+        clampSignedNumber(defenderSuccessLevels),
+      ),
+    );
+  }
+
+  setCriticalHitLocationRoll(criticalHitLocationRoll: number | null) {
+    this.applySession(
+      setCriticalHitLocationRoll(this.state.session, criticalHitLocationRoll),
+    );
   }
 
   clearLog() {
@@ -130,8 +167,7 @@ export class PixelsController {
           name: pixel.name,
         });
 
-        this.patch({
-          session,
+        this.applySession(session, {
           error:
             session.unsupportedReason ||
             "Unsupported die type for v1. Official Pixels d10 and d00 required.",
@@ -159,11 +195,7 @@ export class PixelsController {
         name: pixel.name,
       });
 
-      this.patch({
-        session,
-        latestResult: session.latestResult,
-        error: null,
-      });
+      this.applySession(session, { error: null });
       this.syncRole(role, pixel);
       this.addLog(`${capitalize(role)} die ready.`);
     } catch (error) {
@@ -215,7 +247,7 @@ export class PixelsController {
         at: Date.now(),
       });
 
-      this.patch({ session, latestResult: session.latestResult });
+      this.applySession(session);
       this.syncRole(role, pixel);
       this.addLog(`${capitalize(role)} die rolled ${face}.`);
 
@@ -255,6 +287,11 @@ export class PixelsController {
       session: createPocSessionState(),
       latestResult: null,
       target: 50,
+      attackMode: false,
+      damageBonus: 0,
+      isOpposed: false,
+      defenderSuccessLevels: 0,
+      criticalHitLocationRoll: null,
       error: null,
     });
   }
@@ -320,6 +357,23 @@ export class PixelsController {
     this.emit();
   }
 
+  private applySession(
+    session: PocSessionState,
+    patch: Partial<AppState> = {},
+  ) {
+    this.patch({
+      session,
+      target: session.target,
+      attackMode: session.attack.enabled,
+      damageBonus: session.attack.damageBonus,
+      isOpposed: session.attack.isOpposed,
+      defenderSuccessLevels: session.attack.defenderSuccessLevels,
+      criticalHitLocationRoll: session.attack.criticalHitLocationRoll,
+      latestResult: session.latestResult,
+      ...patch,
+    });
+  }
+
   private emit() {
     for (const listener of this.listeners) {
       listener();
@@ -374,6 +428,14 @@ function clampTarget(target: number): number {
   }
 
   return Math.min(100, Math.max(1, Math.round(target)));
+}
+
+function clampSignedNumber(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.round(value);
 }
 
 function capitalize(value: string): string {
