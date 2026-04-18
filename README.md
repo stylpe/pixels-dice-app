@@ -25,6 +25,15 @@ pnpm dev
 ```
 
 Open app in Chrome or Edge at the local URL Vite prints.
+Chrome is primary dev and test target.
+
+For explicit local modes:
+
+```bash
+pnpm dev:desktop
+pnpm dev:usb
+pnpm adb:reverse
+```
 
 ## Commands
 
@@ -36,16 +45,27 @@ pnpm playwright:install
 pnpm test:e2e
 ```
 
-## Debug In Edge
+## Debug In Chrome
 
-- Use VS Code Run and Debug with `Edge: Launch Pixels App`.
-- That profile starts Vite on `http://localhost:5173` and opens Microsoft Edge with debugger attached.
-- Web Bluetooth testing should still happen in full Edge, not embedded preview.
+- Use VS Code Run and Debug with `Chrome: Launch Pixels App`.
+- That profile starts Vite on `http://localhost:5173` and opens Google Chrome with debugger attached.
+- Chrome is preferred because persistent Web Bluetooth permission support is the main tested path.
+- Edge can still work for basic Web Bluetooth, but it is no longer the primary dev target.
+
+## Android USB Testing
+
+- Enable USB debugging on Android device.
+- Connect phone over USB.
+- Run `pnpm adb:reverse` so phone `localhost:5173` points at laptop port 5173.
+- Run `pnpm dev:usb` to bind Vite on `127.0.0.1:5173`.
+- Open `http://localhost:5173` in Chrome on phone.
+- VS Code task shortcut: run `phone-usb`.
 
 ## Web Bluetooth caveats
 
-- Use Chromium-based browser. Chrome or Edge safest.
+- Use Chromium-based browser. Chrome is primary target.
 - Web Bluetooth requires secure context. `localhost` works for development.
+- Android over USB can use `adb reverse` plus `http://localhost:5173` to keep secure-context behavior without LAN HTTPS.
 - Browser inside terminal tooling is irrelevant here. Real runtime is host browser.
 - Reconnect persistence depends on Chrome permissions backend state.
 - Windows reconnect timing can be flaky; `repeatConnect()` already used for that.

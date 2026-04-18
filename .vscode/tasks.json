@@ -6,13 +6,7 @@
 			"type": "shell",
 			"command": "pnpm",
 			"args": [
-				"dev",
-				"--",
-				"--host",
-				"localhost",
-				"--port",
-				"5173",
-				"--strictPort"
+				"dev:desktop"
 			],
 			"isBackground": true,
 			"problemMatcher": [
@@ -31,6 +25,39 @@
 			"group": "build"
 		},
 		{
+			"label": "adb-reverse",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"adb:reverse"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "dev:usb",
+			"type": "shell",
+			"command": "pnpm",
+			"args": [
+				"dev:usb"
+			],
+			"isBackground": true,
+			"problemMatcher": [
+				{
+					"owner": "custom",
+					"pattern": {
+						"regexp": "^(?!x)x"
+					},
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": ".",
+						"endsPattern": "Local:\\s+http://127.0.0.1:5173/"
+					}
+				}
+			],
+			"group": "build"
+		},
+		{
 			"label": "build",
 			"type": "shell",
 			"command": "pnpm",
@@ -40,6 +67,15 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "phone-usb",
+			"dependsOn": [
+				"adb-reverse",
+				"dev:usb"
+			],
+			"dependsOrder": "sequence",
+			"problemMatcher": []
 		}
 	]
 }

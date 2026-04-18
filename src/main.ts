@@ -101,7 +101,7 @@ function render() {
         <article class="panel checklist-panel">
           <p class="kicker">Host Workflow</p>
           <ol>
-            <li>Run <span>pnpm dev</span> and open app in Chrome or Edge.</li>
+            <li>Run <span>pnpm dev</span> and open app in Chrome.</li>
             <li>Click connect and choose authorized Pixel.</li>
             <li>Use RSSI and blink controls to sanity-check link quality.</li>
             <li>Roll die and watch event log for live face updates.</li>

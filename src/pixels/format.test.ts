@@ -16,7 +16,7 @@ describe("format helpers", () => {
   it("formats capability guidance", () => {
     expect(
       formatCapabilities({ bluetooth: false, persistentPermissions: false }),
-    ).toContain("Use Chrome or Edge");
+    ).toContain("Use Chrome on localhost or HTTPS");
 
     expect(
       formatCapabilities({ bluetooth: true, persistentPermissions: true }),

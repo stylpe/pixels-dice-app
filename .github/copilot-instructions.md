@@ -15,8 +15,8 @@
 - App target: browser-only Web Bluetooth client for Pixels dice using @systemic-games/pixels-web-connect.
 - Keep Pixels API behind src/pixels wrapper code.
 - Verified commands: `pnpm check`, `pnpm test`, `pnpm build`.
-- VS Code tasks: `dev`, `build`.
-- VS Code launch: `Edge: Launch Pixels App`.
+- VS Code tasks: `dev`, `build`, `phone-usb`.
+- VS Code launch: `Chrome: Launch Pixels App`.
 - No required extensions identified.
 - Launch step stays pending until user confirms they want debug or run started.
 - Unix-style line endings, LF, for all files.

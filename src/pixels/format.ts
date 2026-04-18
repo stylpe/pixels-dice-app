@@ -22,7 +22,7 @@ export function formatCapabilities(
   capabilities: BluetoothCapabilities,
 ): string {
   if (!capabilities.bluetooth) {
-    return "Web Bluetooth missing here. Use Chrome or Edge on localhost or HTTPS.";
+    return "Web Bluetooth missing here. Use Chrome on localhost or HTTPS.";
   }
 
   if (!capabilities.persistentPermissions) {

@@ -7,6 +7,9 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "vite --host localhost --port 5173 --strictPort",
+    "dev:usb": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "adb:reverse": "adb reverse tcp:5173 tcp:5173",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check": "biome check .",

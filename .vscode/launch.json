@@ -2,8 +2,8 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Edge: Launch Pixels App",
-			"type": "msedge",
+			"name": "Chrome: Launch Pixels App",
+			"type": "chrome",
 			"request": "launch",
 			"url": "http://localhost:5173",
 			"webRoot": "${workspaceFolder}",
