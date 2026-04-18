@@ -27,6 +27,13 @@ import {
   toDieSlotState,
 } from "./die-slot";
 import {
+  attachPixelEventHandlers,
+  detachPixelEventHandlers,
+  type PixelBatteryEvent,
+  type PixelEventHandlers,
+  type PixelRollStateEvent,
+} from "./pixel-events";
+import {
   getAutoReconnectCheckingMessage,
   getAutoReconnectStatus,
   getAutoReconnectSummary,
@@ -66,15 +73,7 @@ const MAX_LOG_ENTRIES = 14;
 
 export class PixelsController {
   private listeners = new Set<() => void>();
-  private pixelListeners = new Map<
-    string,
-    {
-      statusChanged: () => void;
-      rollState: (event: { state: string; face: number }) => void;
-      roll: (face: number) => void;
-      battery: (event: { level: number; isCharging: boolean }) => void;
-    }
-  >();
+  private pixelListeners = new Map<string, PixelEventHandlers>();
   private state: AppState = {
     busy: false,
     capabilities: getBluetoothCapabilities(),
@@ -328,7 +327,7 @@ export class PixelsController {
       this.syncRole(role, pixel);
       this.addLog(`${capitalize(role)} die status ${pixel.status}.`);
     };
-    const onRollState = (event: { state: string; face: number }) => {
+    const onRollState = (event: PixelRollStateEvent) => {
       this.syncRole(role, pixel);
       this.addLog(
         `${capitalize(role)} die ${event.state}; face ${event.face}.`,
@@ -351,24 +350,21 @@ export class PixelsController {
         );
       }
     };
-    const onBattery = (event: { level: number; isCharging: boolean }) => {
+    const onBattery = (event: PixelBatteryEvent) => {
       this.syncRole(role, pixel);
       this.addLog(
         `${capitalize(role)} die battery ${event.level}%${event.isCharging ? ", charging" : ""}.`,
       );
     };
 
-    pixel.addEventListener("statusChanged", onStatusChanged);
-    pixel.addEventListener("rollState", onRollState);
-    pixel.addEventListener("roll", onRoll);
-    pixel.addEventListener("battery", onBattery);
-
-    this.pixelListeners.set(pixel.systemId, {
+    const handlers = attachPixelEventHandlers(pixel, {
       statusChanged: onStatusChanged,
       rollState: onRollState,
       roll: onRoll,
       battery: onBattery,
     });
+
+    this.pixelListeners.set(pixel.systemId, handlers);
 
     this.patchRolePixel(role, pixel);
     this.syncRole(role, pixel);
@@ -400,10 +396,7 @@ export class PixelsController {
     const listeners = this.pixelListeners.get(pixel.systemId);
 
     if (listeners) {
-      pixel.removeEventListener("statusChanged", listeners.statusChanged);
-      pixel.removeEventListener("rollState", listeners.rollState);
-      pixel.removeEventListener("roll", listeners.roll);
-      pixel.removeEventListener("battery", listeners.battery);
+      detachPixelEventHandlers(pixel, listeners);
       this.pixelListeners.delete(pixel.systemId);
     }
 
