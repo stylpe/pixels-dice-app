@@ -20,6 +20,19 @@ import {
   setOpposed,
   setPocTarget,
 } from "../wfrp/poc-session";
+import {
+  type DieRole,
+  getAutoReconnectCheckingMessage,
+  getAutoReconnectStatus,
+  getAutoReconnectSummary,
+  getAutoReconnectSupport,
+  getNoSavedDiceLogMessage,
+  getNoSavedDiceStatus,
+  getSavedDieUnauthorizedMessage,
+  getSavedReconnectRoles,
+  persistDieSystemId,
+  readSavedDiceIds,
+} from "./reconnect";
 
 type LogEntry = {
   at: string;
@@ -56,9 +69,6 @@ type AppState = {
 };
 
 const MAX_LOG_ENTRIES = 14;
-const SAVED_DICE_STORAGE_KEY = "pixels-wfrp.saved-dice";
-const CHROME_BLUETOOTH_FLAGS_URL =
-  "chrome://flags/#enable-web-bluetooth-new-permissions-backend";
 
 export class PixelsController {
   private listeners = new Set<() => void>();
@@ -140,7 +150,14 @@ export class PixelsController {
   }
 
   async initialize() {
-    this.logAutoReconnectSupport();
+    const support = getAutoReconnectSupport(this.state.capabilities);
+
+    this.addLog(support.logMessage);
+
+    if (support.autoReconnectStatus) {
+      this.patch({ autoReconnectStatus: support.autoReconnectStatus });
+    }
+
     await this.tryAutoReconnect();
   }
 
@@ -191,35 +208,22 @@ export class PixelsController {
   }
 
   private async tryAutoReconnect() {
-    if (!this.state.capabilities.bluetooth) {
-      this.patch({
-        autoReconnectStatus: "Auto-reconnect unavailable in this browser.",
-      });
-      return;
-    }
+    const support = getAutoReconnectSupport(this.state.capabilities);
 
-    if (!this.state.capabilities.persistentPermissions) {
-      this.patch({
-        autoReconnectStatus:
-          "Auto-reconnect unavailable until persistent Bluetooth permissions are supported.",
-      });
+    if (!support.available) {
       return;
     }
 
     const savedDiceIds = readSavedDiceIds();
-    const roles = getSavedRoles(savedDiceIds);
+    const roles = getSavedReconnectRoles(savedDiceIds);
 
     if (roles.length === 0) {
-      this.addLog("Auto-reconnect ready, but no saved dice ids found yet.");
-      this.patch({
-        autoReconnectStatus: "No saved dice to auto-reconnect yet.",
-      });
+      this.addLog(getNoSavedDiceLogMessage());
+      this.patch({ autoReconnectStatus: getNoSavedDiceStatus() });
       return;
     }
 
-    this.addLog(
-      `Auto-reconnect checking ${roles.length} saved ${roles.length === 1 ? "die" : "dice"}.`,
-    );
+    this.addLog(getAutoReconnectCheckingMessage(roles.length));
     this.patch({
       busy: true,
       autoReconnectStatus: "Trying saved dice...",
@@ -238,9 +242,7 @@ export class PixelsController {
           const pixel = await getPixel(systemId);
 
           if (!pixel) {
-            this.addLog(
-              `Saved ${role} die not currently authorized. Connect manually if needed.`,
-            );
+            this.addLog(getSavedDieUnauthorizedMessage(role));
             return false;
           }
 
@@ -259,37 +261,12 @@ export class PixelsController {
       const restoredCount = reconnectResults.filter(Boolean).length;
 
       this.patch({
-        autoReconnectStatus:
-          restoredCount > 0
-            ? `Auto-reconnected ${restoredCount} saved ${restoredCount === 1 ? "die" : "dice"}.`
-            : "Saved dice not reconnected. Manual connect still available.",
+        autoReconnectStatus: getAutoReconnectStatus(restoredCount),
       });
-      this.addLog(
-        restoredCount > 0
-          ? `Auto-reconnect restored ${restoredCount} saved ${restoredCount === 1 ? "die" : "dice"}.`
-          : "Auto-reconnect found no currently authorized saved dice.",
-      );
+      this.addLog(getAutoReconnectSummary(restoredCount));
     } finally {
       this.patch({ busy: false });
     }
-  }
-
-  private logAutoReconnectSupport() {
-    if (!this.state.capabilities.bluetooth) {
-      this.addLog("Auto-reconnect unavailable: Web Bluetooth missing.");
-      return;
-    }
-
-    if (!this.state.capabilities.persistentPermissions) {
-      this.addLog(
-        `Auto-reconnect unavailable: persistent Bluetooth permissions backend not detected. Copy into new tab: ${CHROME_BLUETOOTH_FLAGS_URL}`,
-      );
-      return;
-    }
-
-    this.addLog(
-      "Auto-reconnect supported: persistent Bluetooth permissions backend detected.",
-    );
   }
 
   private async connectPixel(pixel: Pixel, source: "manual" | "auto") {
@@ -352,7 +329,7 @@ export class PixelsController {
     );
   }
 
-  private attachPixel(role: "tens" | "units", pixel: Pixel) {
+  private attachPixel(role: DieRole, pixel: Pixel) {
     const onStatusChanged = () => {
       this.syncRole(role, pixel);
       this.addLog(`${capitalize(role)} die status ${pixel.status}.`);
@@ -419,7 +396,7 @@ export class PixelsController {
     });
   }
 
-  private detachRole(role: "tens" | "units") {
+  private detachRole(role: DieRole) {
     const pixel = this.getPixelForRole(role);
 
     if (!pixel) {
@@ -441,7 +418,7 @@ export class PixelsController {
     } as Partial<AppState>);
   }
 
-  private syncRole(role: "tens" | "units", pixel: Pixel) {
+  private syncRole(role: DieRole, pixel: Pixel) {
     const slot: DieSlotState = {
       role,
       pixel,
@@ -458,7 +435,7 @@ export class PixelsController {
     } as Partial<AppState>);
   }
 
-  private patchRolePixel(role: "tens" | "units", pixel: Pixel) {
+  private patchRolePixel(role: DieRole, pixel: Pixel) {
     this.patch({
       [role === "tens" ? "tensDie" : "unitsDie"]: {
         ...this.getSlot(role),
@@ -467,11 +444,11 @@ export class PixelsController {
     } as Partial<AppState>);
   }
 
-  private getPixelForRole(role: "tens" | "units"): Pixel | null {
+  private getPixelForRole(role: DieRole): Pixel | null {
     return this.getSlot(role).pixel;
   }
 
-  private getSlot(role: "tens" | "units"): DieSlotState {
+  private getSlot(role: DieRole): DieSlotState {
     return role === "tens" ? this.state.tensDie : this.state.unitsDie;
   }
 
@@ -520,7 +497,7 @@ export class PixelsController {
   }
 }
 
-function getRoleFromDieType(dieType: string): "tens" | "units" | null {
+function getRoleFromDieType(dieType: string): DieRole | null {
   if (dieType === "d00") {
     return "tens";
   }
@@ -532,21 +509,7 @@ function getRoleFromDieType(dieType: string): "tens" | "units" | null {
   return null;
 }
 
-function getSavedRoles(savedDiceIds: SavedDiceIds): Array<"tens" | "units"> {
-  const roles: Array<"tens" | "units"> = [];
-
-  if (savedDiceIds.tens) {
-    roles.push("tens");
-  }
-
-  if (savedDiceIds.units) {
-    roles.push("units");
-  }
-
-  return roles;
-}
-
-function emptyDieSlot(role: "tens" | "units"): DieSlotState {
+function emptyDieSlot(role: DieRole): DieSlotState {
   return {
     role,
     pixel: null,
@@ -587,66 +550,4 @@ function entry(message: string): LogEntry {
   }).format(new Date());
 
   return { at, message };
-}
-
-type SavedDiceIds = Partial<Record<"tens" | "units", string>>;
-
-function persistDieSystemId(role: "tens" | "units", systemId: string) {
-  const savedDiceIds = readSavedDiceIds();
-  savedDiceIds[role] = systemId;
-  writeSavedDiceIds(savedDiceIds);
-}
-
-function readSavedDiceIds(): SavedDiceIds {
-  const storage = getStorage();
-
-  if (!storage) {
-    return {};
-  }
-
-  const rawValue = storage.getItem(SAVED_DICE_STORAGE_KEY);
-
-  if (!rawValue) {
-    return {};
-  }
-
-  try {
-    const parsedValue = JSON.parse(rawValue);
-
-    if (!parsedValue || typeof parsedValue !== "object") {
-      return {};
-    }
-
-    const savedDiceIds: SavedDiceIds = {};
-
-    if (typeof parsedValue.tens === "string") {
-      savedDiceIds.tens = parsedValue.tens;
-    }
-
-    if (typeof parsedValue.units === "string") {
-      savedDiceIds.units = parsedValue.units;
-    }
-
-    return savedDiceIds;
-  } catch {
-    return {};
-  }
-}
-
-function writeSavedDiceIds(savedDiceIds: SavedDiceIds) {
-  const storage = getStorage();
-
-  if (!storage) {
-    return;
-  }
-
-  storage.setItem(SAVED_DICE_STORAGE_KEY, JSON.stringify(savedDiceIds));
-}
-
-function getStorage(): Pick<Storage, "getItem" | "setItem"> | null {
-  if (typeof globalThis.localStorage === "undefined") {
-    return null;
-  }
-
-  return globalThis.localStorage;
 }
