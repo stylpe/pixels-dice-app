@@ -26,10 +26,10 @@ export function formatCapabilities(
   }
 
   if (!capabilities.persistentPermissions) {
-    return "Web Bluetooth available. Persistent permission backend off, so reconnect may need user approval again after browser restart.";
+    return "Web Bluetooth available. Persistent permission backend off, so saved dice may still need user approval again after browser restart.";
   }
 
-  return "Web Bluetooth available and persistent permissions backend detected.";
+  return "Web Bluetooth available and persistent permissions backend detected. Saved dice can auto-reconnect when still authorized.";
 }
 
 export function formatBattery(

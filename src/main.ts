@@ -134,6 +134,7 @@ function render() {
           ${critLocationPrompt}
           ${state.attackMode ? '<p class="attack-note">Attack-only rules active: crit/fumble, hit location, and raw damage before armor/TB.</p>' : ""}
           <p class="support-note">${formatCapabilities(state.capabilities)}</p>
+          ${state.autoReconnectStatus ? `<p class="subtle reconnect-note">${state.autoReconnectStatus}</p>` : ""}
           ${state.error ? `<p class="error-banner">${state.error}</p>` : ""}
         </div>
         <div class="signal-card">
@@ -193,7 +194,7 @@ function render() {
                 (entry) => `
                   <li>
                     <span class="timestamp">${entry.at}</span>
-                    <span>${entry.message}</span>
+                    <span>${escapeHtml(entry.message)}</span>
                   </li>
                 `,
               )
@@ -721,5 +722,14 @@ function escapeAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 controller.subscribe(render);
 render();
+void controller.initialize();

@@ -19,8 +19,12 @@ describe("format helpers", () => {
     ).toContain("Use Chrome on localhost or HTTPS");
 
     expect(
+      formatCapabilities({ bluetooth: true, persistentPermissions: false }),
+    ).toContain("saved dice may still need user approval again");
+
+    expect(
       formatCapabilities({ bluetooth: true, persistentPermissions: true }),
-    ).toContain("persistent permissions backend detected");
+    ).toContain("Saved dice can auto-reconnect");
   });
 
   it("formats battery and face values", () => {

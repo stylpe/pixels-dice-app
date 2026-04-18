@@ -1,6 +1,7 @@
 import {
   type BluetoothCapabilities,
   getBluetoothCapabilities,
+  getPixel,
   type Pixel,
   type PixelStatus,
   repeatConnect,
@@ -39,6 +40,7 @@ type DieSlotState = {
 type AppState = {
   busy: boolean;
   capabilities: BluetoothCapabilities;
+  autoReconnectStatus: string | null;
   target: number;
   attackMode: boolean;
   damageBonus: number;
@@ -54,6 +56,9 @@ type AppState = {
 };
 
 const MAX_LOG_ENTRIES = 14;
+const SAVED_DICE_STORAGE_KEY = "pixels-wfrp.saved-dice";
+const CHROME_BLUETOOTH_FLAGS_URL =
+  "chrome://flags/#enable-web-bluetooth-new-permissions-backend";
 
 export class PixelsController {
   private listeners = new Set<() => void>();
@@ -69,6 +74,7 @@ export class PixelsController {
   private state: AppState = {
     busy: false,
     capabilities: getBluetoothCapabilities(),
+    autoReconnectStatus: null,
     target: 50,
     attackMode: false,
     damageBonus: 0,
@@ -133,6 +139,11 @@ export class PixelsController {
     this.patch({ eventLog: [entry("Log cleared.")] });
   }
 
+  async initialize() {
+    this.logAutoReconnectSupport();
+    await this.tryAutoReconnect();
+  }
+
   async connect() {
     if (!this.state.capabilities.bluetooth) {
       this.patch({
@@ -147,57 +158,7 @@ export class PixelsController {
       const pixel = await requestPixel();
 
       this.addLog(`Selected ${pixel.name || "Pixels die"}.`);
-
-      await repeatConnect(pixel, {
-        retries: 3,
-        onWillRetry: (delay, retriesLeft, error) => {
-          this.addLog(
-            `Connect retry in ${delay}ms. ${retriesLeft} retries left. ${this.normalizeError(error)}`,
-          );
-        },
-      });
-
-      const dieType = pixel.dieType;
-      const role = getRoleFromDieType(dieType);
-
-      if (!role) {
-        const session = registerPocDie(this.state.session, {
-          systemId: pixel.systemId,
-          dieType,
-          name: pixel.name,
-        });
-
-        this.applySession(session, {
-          error:
-            session.unsupportedReason ||
-            "Unsupported die type for v1. Official Pixels d10 and d00 required.",
-        });
-        this.addLog(`Rejected die type ${dieType || "unknown"}.`);
-        return;
-      }
-
-      const currentPixel = this.getPixelForRole(role);
-      if (currentPixel && currentPixel !== pixel) {
-        this.patch({
-          error: `${capitalize(role)} die already connected. Disconnect first to replace it.`,
-        });
-        this.addLog(`${capitalize(role)} die already occupied.`);
-        return;
-      }
-
-      if (currentPixel !== pixel) {
-        this.attachPixel(role, pixel);
-      }
-
-      const session = registerPocDie(this.state.session, {
-        systemId: pixel.systemId,
-        dieType,
-        name: pixel.name,
-      });
-
-      this.applySession(session, { error: null });
-      this.syncRole(role, pixel);
-      this.addLog(`${capitalize(role)} die ready.`);
+      await this.connectPixel(pixel, "manual");
     } catch (error) {
       this.patch({ error: this.normalizeError(error) });
       this.addLog(`Connect failed: ${this.normalizeError(error)}`);
@@ -227,6 +188,168 @@ export class PixelsController {
     } finally {
       this.patch({ busy: false });
     }
+  }
+
+  private async tryAutoReconnect() {
+    if (!this.state.capabilities.bluetooth) {
+      this.patch({
+        autoReconnectStatus: "Auto-reconnect unavailable in this browser.",
+      });
+      return;
+    }
+
+    if (!this.state.capabilities.persistentPermissions) {
+      this.patch({
+        autoReconnectStatus:
+          "Auto-reconnect unavailable until persistent Bluetooth permissions are supported.",
+      });
+      return;
+    }
+
+    const savedDiceIds = readSavedDiceIds();
+    const roles = getSavedRoles(savedDiceIds);
+
+    if (roles.length === 0) {
+      this.addLog("Auto-reconnect ready, but no saved dice ids found yet.");
+      this.patch({
+        autoReconnectStatus: "No saved dice to auto-reconnect yet.",
+      });
+      return;
+    }
+
+    this.addLog(
+      `Auto-reconnect checking ${roles.length} saved ${roles.length === 1 ? "die" : "dice"}.`,
+    );
+    this.patch({
+      busy: true,
+      autoReconnectStatus: "Trying saved dice...",
+      error: null,
+    });
+
+    try {
+      const reconnectResults = await Promise.all(
+        roles.map(async (role) => {
+          const systemId = savedDiceIds[role];
+
+          if (!systemId) {
+            return false;
+          }
+
+          const pixel = await getPixel(systemId);
+
+          if (!pixel) {
+            this.addLog(
+              `Saved ${role} die not currently authorized. Connect manually if needed.`,
+            );
+            return false;
+          }
+
+          try {
+            await this.connectPixel(pixel, "auto");
+            return true;
+          } catch (error) {
+            this.addLog(
+              `Auto-reconnect failed for ${role} die: ${this.normalizeError(error)}`,
+            );
+            return false;
+          }
+        }),
+      );
+
+      const restoredCount = reconnectResults.filter(Boolean).length;
+
+      this.patch({
+        autoReconnectStatus:
+          restoredCount > 0
+            ? `Auto-reconnected ${restoredCount} saved ${restoredCount === 1 ? "die" : "dice"}.`
+            : "Saved dice not reconnected. Manual connect still available.",
+      });
+      this.addLog(
+        restoredCount > 0
+          ? `Auto-reconnect restored ${restoredCount} saved ${restoredCount === 1 ? "die" : "dice"}.`
+          : "Auto-reconnect found no currently authorized saved dice.",
+      );
+    } finally {
+      this.patch({ busy: false });
+    }
+  }
+
+  private logAutoReconnectSupport() {
+    if (!this.state.capabilities.bluetooth) {
+      this.addLog("Auto-reconnect unavailable: Web Bluetooth missing.");
+      return;
+    }
+
+    if (!this.state.capabilities.persistentPermissions) {
+      this.addLog(
+        `Auto-reconnect unavailable: persistent Bluetooth permissions backend not detected. Copy into new tab: ${CHROME_BLUETOOTH_FLAGS_URL}`,
+      );
+      return;
+    }
+
+    this.addLog(
+      "Auto-reconnect supported: persistent Bluetooth permissions backend detected.",
+    );
+  }
+
+  private async connectPixel(pixel: Pixel, source: "manual" | "auto") {
+    await repeatConnect(pixel, {
+      retries: 3,
+      onWillRetry: (delay, retriesLeft, error) => {
+        this.addLog(
+          `Connect retry in ${delay}ms. ${retriesLeft} retries left. ${this.normalizeError(error)}`,
+        );
+      },
+    });
+
+    const dieType = pixel.dieType;
+    const role = getRoleFromDieType(dieType);
+
+    if (!role) {
+      const session = registerPocDie(this.state.session, {
+        systemId: pixel.systemId,
+        dieType,
+        name: pixel.name,
+      });
+
+      this.applySession(session, {
+        error:
+          session.unsupportedReason ||
+          "Unsupported die type for v1. Official Pixels d10 and d00 required.",
+      });
+      this.addLog(`Rejected die type ${dieType || "unknown"}.`);
+      return;
+    }
+
+    const currentPixel = this.getPixelForRole(role);
+    if (currentPixel && currentPixel !== pixel) {
+      throw new Error(
+        `${capitalize(role)} die already connected. Disconnect first to replace it.`,
+      );
+    }
+
+    if (currentPixel !== pixel) {
+      this.attachPixel(role, pixel);
+    }
+
+    const session = registerPocDie(this.state.session, {
+      systemId: pixel.systemId,
+      dieType,
+      name: pixel.name,
+    });
+
+    this.applySession(session, {
+      autoReconnectStatus:
+        source === "auto"
+          ? `Reconnected saved ${role} die.`
+          : this.state.autoReconnectStatus,
+      error: null,
+    });
+    this.syncRole(role, pixel);
+    persistDieSystemId(role, pixel.systemId);
+    this.addLog(
+      `${capitalize(role)} die ready${source === "auto" ? " (auto)." : "."}`,
+    );
   }
 
   private attachPixel(role: "tens" | "units", pixel: Pixel) {
@@ -409,6 +532,20 @@ function getRoleFromDieType(dieType: string): "tens" | "units" | null {
   return null;
 }
 
+function getSavedRoles(savedDiceIds: SavedDiceIds): Array<"tens" | "units"> {
+  const roles: Array<"tens" | "units"> = [];
+
+  if (savedDiceIds.tens) {
+    roles.push("tens");
+  }
+
+  if (savedDiceIds.units) {
+    roles.push("units");
+  }
+
+  return roles;
+}
+
 function emptyDieSlot(role: "tens" | "units"): DieSlotState {
   return {
     role,
@@ -450,4 +587,66 @@ function entry(message: string): LogEntry {
   }).format(new Date());
 
   return { at, message };
+}
+
+type SavedDiceIds = Partial<Record<"tens" | "units", string>>;
+
+function persistDieSystemId(role: "tens" | "units", systemId: string) {
+  const savedDiceIds = readSavedDiceIds();
+  savedDiceIds[role] = systemId;
+  writeSavedDiceIds(savedDiceIds);
+}
+
+function readSavedDiceIds(): SavedDiceIds {
+  const storage = getStorage();
+
+  if (!storage) {
+    return {};
+  }
+
+  const rawValue = storage.getItem(SAVED_DICE_STORAGE_KEY);
+
+  if (!rawValue) {
+    return {};
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue);
+
+    if (!parsedValue || typeof parsedValue !== "object") {
+      return {};
+    }
+
+    const savedDiceIds: SavedDiceIds = {};
+
+    if (typeof parsedValue.tens === "string") {
+      savedDiceIds.tens = parsedValue.tens;
+    }
+
+    if (typeof parsedValue.units === "string") {
+      savedDiceIds.units = parsedValue.units;
+    }
+
+    return savedDiceIds;
+  } catch {
+    return {};
+  }
+}
+
+function writeSavedDiceIds(savedDiceIds: SavedDiceIds) {
+  const storage = getStorage();
+
+  if (!storage) {
+    return;
+  }
+
+  storage.setItem(SAVED_DICE_STORAGE_KEY, JSON.stringify(savedDiceIds));
+}
+
+function getStorage(): Pick<Storage, "getItem" | "setItem"> | null {
+  if (typeof globalThis.localStorage === "undefined") {
+    return null;
+  }
+
+  return globalThis.localStorage;
 }

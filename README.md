@@ -69,6 +69,7 @@ pnpm test:e2e
 - Browser inside terminal tooling is irrelevant here. Real runtime is host browser.
 - Reconnect persistence depends on Chrome permissions backend state.
 - Windows reconnect timing can be flaky; `repeatConnect()` already used for that.
+- App remembers last connected official dice ids and will try auto-reconnect when persistent permissions are available.
 
 ## Project layout
 
@@ -79,7 +80,6 @@ pnpm test:e2e
 
 ## Next likely additions
 
-- remember last authorized `systemId`
-- reconnect helper for previously authorized dice
+- better reconnect troubleshooting and reset controls
 - animation playground using `@systemic-games/pixels-edit-animation`
 - richer log filtering and telemetry panels
