@@ -3,7 +3,6 @@ import {
   getBluetoothCapabilities,
   getPixel,
   type Pixel,
-  type PixelStatus,
   repeatConnect,
   requestPixel,
 } from "@systemic-games/pixels-web-connect";
@@ -21,7 +20,13 @@ import {
   setPocTarget,
 } from "../wfrp/poc-session";
 import {
+  createEmptyDieSlot,
   type DieRole,
+  type DieSlotState,
+  getDieRoleFromType,
+  toDieSlotState,
+} from "./die-slot";
+import {
   getAutoReconnectCheckingMessage,
   getAutoReconnectStatus,
   getAutoReconnectSummary,
@@ -37,17 +42,6 @@ import {
 type LogEntry = {
   at: string;
   message: string;
-};
-
-type DieSlotState = {
-  role: "tens" | "units";
-  pixel: Pixel | null;
-  connectionStatus: PixelStatus;
-  currentFace: number | null;
-  batteryLevel: number | null;
-  isCharging: boolean;
-  name: string;
-  dieType: string | null;
 };
 
 type AppState = {
@@ -93,8 +87,8 @@ export class PixelsController {
     criticalHitLocationRoll: null,
     session: createPocSessionState(),
     latestResult: null,
-    tensDie: emptyDieSlot("tens"),
-    unitsDie: emptyDieSlot("units"),
+    tensDie: createEmptyDieSlot("tens"),
+    unitsDie: createEmptyDieSlot("units"),
     eventLog: [entry("App ready. Connect official Pixels d00 and d10 dice.")],
     error: null,
   };
@@ -280,7 +274,7 @@ export class PixelsController {
     });
 
     const dieType = pixel.dieType;
-    const role = getRoleFromDieType(dieType);
+    const role = getDieRoleFromType(dieType);
 
     if (!role) {
       const session = registerPocDie(this.state.session, {
@@ -414,21 +408,12 @@ export class PixelsController {
     }
 
     this.patch({
-      [role === "tens" ? "tensDie" : "unitsDie"]: emptyDieSlot(role),
+      [role === "tens" ? "tensDie" : "unitsDie"]: createEmptyDieSlot(role),
     } as Partial<AppState>);
   }
 
   private syncRole(role: DieRole, pixel: Pixel) {
-    const slot: DieSlotState = {
-      role,
-      pixel,
-      connectionStatus: pixel.status,
-      currentFace: pixel.currentFace || null,
-      batteryLevel: pixel.batteryLevel,
-      isCharging: pixel.isCharging,
-      name: pixel.name,
-      dieType: pixel.dieType,
-    };
+    const slot = toDieSlotState(role, pixel);
 
     this.patch({
       [role === "tens" ? "tensDie" : "unitsDie"]: slot,
@@ -495,31 +480,6 @@ export class PixelsController {
 
     return String(error);
   }
-}
-
-function getRoleFromDieType(dieType: string): DieRole | null {
-  if (dieType === "d00") {
-    return "tens";
-  }
-
-  if (dieType === "d10") {
-    return "units";
-  }
-
-  return null;
-}
-
-function emptyDieSlot(role: DieRole): DieSlotState {
-  return {
-    role,
-    pixel: null,
-    connectionStatus: "disconnected",
-    currentFace: null,
-    batteryLevel: null,
-    isCharging: false,
-    name: "",
-    dieType: null,
-  };
 }
 
 function clampTarget(target: number): number {

@@ -1,6 +1,5 @@
 import type { BluetoothCapabilities } from "@systemic-games/pixels-web-connect";
-
-export type DieRole = "tens" | "units";
+import type { DieRole } from "./die-slot";
 
 export type SavedDiceIds = Partial<Record<DieRole, string>>;
 
