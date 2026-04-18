@@ -1,52 +1,71 @@
 import {
   type BluetoothCapabilities,
-  Color,
   getBluetoothCapabilities,
   type Pixel,
   type PixelStatus,
   repeatConnect,
   requestPixel,
 } from "@systemic-games/pixels-web-connect";
+import {
+  createPocSessionState,
+  type PocResult,
+  type PocSessionState,
+  registerPocDie,
+  registerPocRoll,
+  setPocTarget,
+} from "../wfrp/poc-session";
 
 type LogEntry = {
   at: string;
   message: string;
 };
 
-type AppState = {
-  busy: boolean;
-  capabilities: BluetoothCapabilities;
+type DieSlotState = {
+  role: "tens" | "units";
+  pixel: Pixel | null;
   connectionStatus: PixelStatus;
   currentFace: number | null;
   batteryLevel: number | null;
   isCharging: boolean;
-  pixelName: string;
-  rollState: string;
-  rssi: number | null;
+  name: string;
+  dieType: string | null;
+};
+
+type AppState = {
+  busy: boolean;
+  capabilities: BluetoothCapabilities;
+  target: number;
+  session: PocSessionState;
+  latestResult: PocResult | null;
+  tensDie: DieSlotState;
+  unitsDie: DieSlotState;
   eventLog: LogEntry[];
   error: string | null;
-  pixel: Pixel | null;
 };
 
 const MAX_LOG_ENTRIES = 14;
 
 export class PixelsController {
   private listeners = new Set<() => void>();
-  private pixelListeners = new Map<string, (...args: unknown[]) => void>();
-  private pixel: Pixel | null = null;
+  private pixelListeners = new Map<
+    string,
+    {
+      statusChanged: () => void;
+      rollState: (event: { state: string; face: number }) => void;
+      roll: (face: number) => void;
+      battery: (event: { level: number; isCharging: boolean }) => void;
+    }
+  >();
   private state: AppState = {
     busy: false,
     capabilities: getBluetoothCapabilities(),
-    connectionStatus: "disconnected",
-    currentFace: null,
-    batteryLevel: null,
-    isCharging: false,
-    pixelName: "",
-    rollState: "unknown",
-    rssi: null,
-    eventLog: [entry("App ready. Connect a Pixel to begin.")],
+    target: 50,
+    session: createPocSessionState(),
+    latestResult: null,
+    tensDie: emptyDieSlot("tens"),
+    unitsDie: emptyDieSlot("units"),
+    eventLog: [entry("App ready. Connect official Pixels d00 and d10 dice.")],
     error: null,
-    pixel: null,
   };
 
   subscribe(listener: () => void): () => void {
@@ -58,6 +77,19 @@ export class PixelsController {
 
   getState(): Readonly<AppState> {
     return this.state;
+  }
+
+  setTarget(target: number) {
+    const safeTarget = clampTarget(target);
+    const session = setPocTarget(this.state.session, safeTarget);
+    const latestResult = this.state.latestResult
+      ? {
+          ...this.state.latestResult,
+          target: safeTarget,
+        }
+      : null;
+
+    this.patch({ target: safeTarget, session, latestResult });
   }
 
   clearLog() {
@@ -77,13 +109,7 @@ export class PixelsController {
     try {
       const pixel = await requestPixel();
 
-      if (this.pixel !== pixel) {
-        this.detachPixel();
-        this.pixel = pixel;
-        this.attachPixel(pixel);
-      }
-
-      this.addLog(`Selected ${pixel.name || "Pixel device"}.`);
+      this.addLog(`Selected ${pixel.name || "Pixels die"}.`);
 
       await repeatConnect(pixel, {
         retries: 3,
@@ -94,8 +120,52 @@ export class PixelsController {
         },
       });
 
-      this.syncFromPixel();
-      this.addLog("Pixel ready.");
+      const dieType = pixel.dieType;
+      const role = getRoleFromDieType(dieType);
+
+      if (!role) {
+        const session = registerPocDie(this.state.session, {
+          systemId: pixel.systemId,
+          dieType,
+          name: pixel.name,
+        });
+
+        this.patch({
+          session,
+          error:
+            session.unsupportedReason ||
+            "Unsupported die type for v1. Official Pixels d10 and d00 required.",
+        });
+        this.addLog(`Rejected die type ${dieType || "unknown"}.`);
+        return;
+      }
+
+      const currentPixel = this.getPixelForRole(role);
+      if (currentPixel && currentPixel !== pixel) {
+        this.patch({
+          error: `${capitalize(role)} die already connected. Disconnect first to replace it.`,
+        });
+        this.addLog(`${capitalize(role)} die already occupied.`);
+        return;
+      }
+
+      if (currentPixel !== pixel) {
+        this.attachPixel(role, pixel);
+      }
+
+      const session = registerPocDie(this.state.session, {
+        systemId: pixel.systemId,
+        dieType,
+        name: pixel.name,
+      });
+
+      this.patch({
+        session,
+        latestResult: session.latestResult,
+        error: null,
+      });
+      this.syncRole(role, pixel);
+      this.addLog(`${capitalize(role)} die ready.`);
     } catch (error) {
       this.patch({ error: this.normalizeError(error) });
       this.addLog(`Connect failed: ${this.normalizeError(error)}`);
@@ -105,16 +175,20 @@ export class PixelsController {
   }
 
   async disconnect() {
-    if (!this.pixel) {
+    const pixels = [this.state.tensDie.pixel, this.state.unitsDie.pixel].filter(
+      (pixel): pixel is Pixel => pixel !== null,
+    );
+
+    if (pixels.length === 0) {
       return;
     }
 
     this.patch({ busy: true, error: null });
 
     try {
-      await this.pixel.disconnect();
-      this.syncFromPixel();
-      this.addLog("Disconnect requested.");
+      await Promise.all(pixels.map((pixel) => pixel.disconnect()));
+      this.detachAllPixels();
+      this.addLog("Disconnected dice.");
     } catch (error) {
       this.patch({ error: this.normalizeError(error) });
       this.addLog(`Disconnect failed: ${this.normalizeError(error)}`);
@@ -123,65 +197,38 @@ export class PixelsController {
     }
   }
 
-  async blink() {
-    if (!this.pixel) {
-      return;
-    }
-
-    this.patch({ busy: true, error: null });
-
-    try {
-      await this.pixel.blink(Color.cyan, {
-        count: 2,
-        duration: 350,
-        fade: 0.3,
-      });
-      this.addLog("Blink command sent.");
-      this.syncFromPixel();
-    } catch (error) {
-      this.patch({ error: this.normalizeError(error) });
-      this.addLog(`Blink failed: ${this.normalizeError(error)}`);
-    } finally {
-      this.patch({ busy: false });
-    }
-  }
-
-  async refreshRssi() {
-    if (!this.pixel) {
-      return;
-    }
-
-    this.patch({ busy: true, error: null });
-
-    try {
-      const rssi = await this.pixel.queryRssi();
-      this.patch({ rssi });
-      this.addLog(`RSSI sampled at ${rssi} dBm.`);
-    } catch (error) {
-      this.patch({ error: this.normalizeError(error) });
-      this.addLog(`RSSI query failed: ${this.normalizeError(error)}`);
-    } finally {
-      this.patch({ busy: false });
-    }
-  }
-
-  private attachPixel(pixel: Pixel) {
+  private attachPixel(role: "tens" | "units", pixel: Pixel) {
     const onStatusChanged = () => {
-      this.syncFromPixel();
-      this.addLog(`Status changed to ${pixel.status}.`);
+      this.syncRole(role, pixel);
+      this.addLog(`${capitalize(role)} die status ${pixel.status}.`);
     };
     const onRollState = (event: { state: string; face: number }) => {
-      this.patch({ currentFace: event.face, rollState: event.state });
-      this.addLog(`Roll state ${event.state}; face ${event.face}.`);
+      this.syncRole(role, pixel);
+      this.addLog(
+        `${capitalize(role)} die ${event.state}; face ${event.face}.`,
+      );
     };
     const onRoll = (face: number) => {
-      this.patch({ currentFace: face });
-      this.addLog(`Rolled ${face}.`);
+      const session = registerPocRoll(this.state.session, {
+        systemId: pixel.systemId,
+        face,
+        at: Date.now(),
+      });
+
+      this.patch({ session, latestResult: session.latestResult });
+      this.syncRole(role, pixel);
+      this.addLog(`${capitalize(role)} die rolled ${face}.`);
+
+      if (session.latestResult) {
+        this.addLog(
+          `Result ${session.latestResult.roll} vs ${session.latestResult.target}; SL ${session.latestResult.successLevels}.`,
+        );
+      }
     };
     const onBattery = (event: { level: number; isCharging: boolean }) => {
-      this.patch({ batteryLevel: event.level, isCharging: event.isCharging });
+      this.syncRole(role, pixel);
       this.addLog(
-        `Battery ${event.level}%${event.isCharging ? ", charging" : ""}.`,
+        `${capitalize(role)} die battery ${event.level}%${event.isCharging ? ", charging" : ""}.`,
       );
     };
 
@@ -190,85 +237,82 @@ export class PixelsController {
     pixel.addEventListener("roll", onRoll);
     pixel.addEventListener("battery", onBattery);
 
-    this.pixelListeners.set("statusChanged", onStatusChanged);
-    this.pixelListeners.set(
-      "rollState",
-      onRollState as (...args: unknown[]) => void,
-    );
-    this.pixelListeners.set("roll", onRoll as (...args: unknown[]) => void);
-    this.pixelListeners.set(
-      "battery",
-      onBattery as (...args: unknown[]) => void,
-    );
+    this.pixelListeners.set(pixel.systemId, {
+      statusChanged: onStatusChanged,
+      rollState: onRollState,
+      roll: onRoll,
+      battery: onBattery,
+    });
 
-    this.syncFromPixel();
+    this.patchRolePixel(role, pixel);
+    this.syncRole(role, pixel);
   }
 
-  private detachPixel() {
-    if (!this.pixel) {
-      return;
-    }
-
-    const statusChanged = this.pixelListeners.get("statusChanged");
-    const rollState = this.pixelListeners.get("rollState");
-    const roll = this.pixelListeners.get("roll");
-    const battery = this.pixelListeners.get("battery");
-
-    if (statusChanged) {
-      this.pixel.removeEventListener(
-        "statusChanged",
-        statusChanged as () => void,
-      );
-    }
-
-    if (rollState) {
-      this.pixel.removeEventListener(
-        "rollState",
-        rollState as (event: { state: string; face: number }) => void,
-      );
-    }
-
-    if (roll) {
-      this.pixel.removeEventListener("roll", roll as (face: number) => void);
-    }
-
-    if (battery) {
-      this.pixel.removeEventListener(
-        "battery",
-        battery as (event: { level: number; isCharging: boolean }) => void,
-      );
-    }
-
-    this.pixelListeners.clear();
-    this.pixel = null;
+  private detachAllPixels() {
+    this.detachRole("tens");
+    this.detachRole("units");
     this.patch({
-      connectionStatus: "disconnected",
-      currentFace: null,
-      batteryLevel: null,
-      isCharging: false,
-      pixelName: "",
-      rollState: "unknown",
-      rssi: null,
-      pixel: null,
+      session: createPocSessionState(),
+      latestResult: null,
+      target: 50,
+      error: null,
     });
   }
 
-  private syncFromPixel() {
-    if (!this.pixel) {
-      this.patch({ pixel: null });
+  private detachRole(role: "tens" | "units") {
+    const pixel = this.getPixelForRole(role);
+
+    if (!pixel) {
       return;
     }
 
+    const listeners = this.pixelListeners.get(pixel.systemId);
+
+    if (listeners) {
+      pixel.removeEventListener("statusChanged", listeners.statusChanged);
+      pixel.removeEventListener("rollState", listeners.rollState);
+      pixel.removeEventListener("roll", listeners.roll);
+      pixel.removeEventListener("battery", listeners.battery);
+      this.pixelListeners.delete(pixel.systemId);
+    }
+
     this.patch({
-      pixel: this.pixel,
-      connectionStatus: this.pixel.status,
-      currentFace: this.pixel.currentFace || null,
-      batteryLevel: this.pixel.batteryLevel,
-      isCharging: this.pixel.isCharging,
-      pixelName: this.pixel.name,
-      rollState: this.pixel.rollState,
-      rssi: this.pixel.rssi || this.state.rssi,
-    });
+      [role === "tens" ? "tensDie" : "unitsDie"]: emptyDieSlot(role),
+    } as Partial<AppState>);
+  }
+
+  private syncRole(role: "tens" | "units", pixel: Pixel) {
+    const slot: DieSlotState = {
+      role,
+      pixel,
+      connectionStatus: pixel.status,
+      currentFace: pixel.currentFace || null,
+      batteryLevel: pixel.batteryLevel,
+      isCharging: pixel.isCharging,
+      name: pixel.name,
+      dieType: pixel.dieType,
+    };
+
+    this.patch({
+      [role === "tens" ? "tensDie" : "unitsDie"]: slot,
+    } as Partial<AppState>);
+  }
+
+  private patchRolePixel(role: "tens" | "units", pixel: Pixel) {
+    this.patch({
+      [role === "tens" ? "tensDie" : "unitsDie"]: {
+        ...this.getSlot(role),
+        pixel,
+      },
+    } as Partial<AppState>);
+  }
+
+  private getPixelForRole(role: "tens" | "units"): Pixel | null {
+    return this.getSlot(role).pixel;
+  }
+
+  private getSlot(role: "tens" | "units"): DieSlotState {
+    return role === "tens" ? this.state.tensDie : this.state.unitsDie;
   }
 
   private patch(patch: Partial<AppState>) {
@@ -297,6 +341,43 @@ export class PixelsController {
 
     return String(error);
   }
+}
+
+function getRoleFromDieType(dieType: string): "tens" | "units" | null {
+  if (dieType === "d00") {
+    return "tens";
+  }
+
+  if (dieType === "d10") {
+    return "units";
+  }
+
+  return null;
+}
+
+function emptyDieSlot(role: "tens" | "units"): DieSlotState {
+  return {
+    role,
+    pixel: null,
+    connectionStatus: "disconnected",
+    currentFace: null,
+    batteryLevel: null,
+    isCharging: false,
+    name: "",
+    dieType: null,
+  };
+}
+
+function clampTarget(target: number): number {
+  if (!Number.isFinite(target)) {
+    return 50;
+  }
+
+  return Math.min(100, Math.max(1, Math.round(target)));
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function entry(message: string): LogEntry {

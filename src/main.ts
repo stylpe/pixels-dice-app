@@ -20,91 +20,90 @@ const controller = new PixelsController();
 function render() {
   const state = controller.getState();
   const connectDisabled = state.busy || !state.capabilities.bluetooth;
-  const deviceReady = state.connectionStatus === "ready";
-  const disconnectDisabled = state.busy || !state.pixel;
-  const actionDisabled = state.busy || !deviceReady;
+  const disconnectDisabled =
+    state.busy || (!state.tensDie.pixel && !state.unitsDie.pixel);
+  const resultTone = state.latestResult
+    ? state.latestResult.success
+      ? "success"
+      : "failure"
+    : "idle";
 
   appRoot.innerHTML = `
     <div class="shell">
       <section class="hero-panel panel">
         <div class="hero-copy">
-          <p class="eyebrow">Pixels Dice Lab</p>
-          <h1>Browser-first control room for Pixels dice.</h1>
+          <p class="eyebrow">Pixels WFRP POC</p>
+          <h1>Roll percentile tests with connected Pixels dice.</h1>
           <p class="lede">
-            Host-only setup. Vanilla TypeScript. No framework tax. Connect, inspect,
-            blink, and watch roll events from Chromium.
+            Thin first slice. Connect official Pixels d00 and d10 dice, enter target,
+            and get D% plus success levels.
           </p>
           <div class="action-row">
             <button data-action="connect" ${connectDisabled ? "disabled" : ""}>
-              ${state.busy && !state.pixel ? "Working..." : "Connect Pixel"}
+              ${state.busy ? "Working..." : "Connect Die"}
             </button>
             <button
               class="ghost"
               data-action="disconnect"
               ${disconnectDisabled ? "disabled" : ""}
             >
-              Disconnect
-            </button>
-            <button
-              class="ghost"
-              data-action="blink"
-              ${actionDisabled ? "disabled" : ""}
-            >
-              Blink Cyan
-            </button>
-            <button
-              class="ghost"
-              data-action="rssi"
-              ${actionDisabled ? "disabled" : ""}
-            >
-              Refresh RSSI
+              Disconnect Dice
             </button>
           </div>
+          <label class="target-field">
+            <span>Target</span>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              value="${state.target}"
+              data-action="target"
+            />
+          </label>
           <p class="support-note">${formatCapabilities(state.capabilities)}</p>
           ${state.error ? `<p class="error-banner">${state.error}</p>` : ""}
         </div>
         <div class="signal-card">
-          <p class="signal-label">Live Status</p>
-          <p class="signal-value">${formatStatus(state.connectionStatus)}</p>
-          <dl class="signal-grid">
+          <p class="signal-label">Latest Result</p>
+          <p class="signal-value result-${resultTone}">${state.latestResult ? state.latestResult.roll : "--"}</p>
+          <dl class="signal-grid result-grid">
             <div>
-              <dt>Device</dt>
-              <dd>${state.pixelName || "No Pixel selected"}</dd>
+              <dt>Target</dt>
+              <dd>${state.target}</dd>
             </div>
             <div>
-              <dt>Battery</dt>
-              <dd>${formatBattery(state.batteryLevel, state.isCharging)}</dd>
+              <dt>SL</dt>
+              <dd>${state.latestResult ? state.latestResult.successLevels : "--"}</dd>
             </div>
             <div>
-              <dt>Face Up</dt>
-              <dd>${formatFace(state.currentFace)}</dd>
+              <dt>Outcome</dt>
+              <dd>${state.latestResult ? (state.latestResult.success ? "Success" : "Failure") : "Waiting"}</dd>
             </div>
             <div>
-              <dt>RSSI</dt>
-              <dd>${state.rssi === null ? "Not sampled" : `${state.rssi} dBm`}</dd>
+              <dt>Dice</dt>
+              <dd>${state.latestResult ? `${state.latestResult.tens} + ${state.latestResult.units}` : "--"}</dd>
             </div>
           </dl>
         </div>
       </section>
 
       <section class="dashboard-grid">
-        <article class="panel stat-panel">
-          <p class="kicker">Roll Feed</p>
-          <div class="face-badge">${formatFace(state.currentFace)}</div>
-          <p class="roll-state">${state.rollState}</p>
-          <p class="subtle">
-            Roll stream starts after device reaches ready state. Use this panel to verify
-            connection, wake behavior, and face detection.
-          </p>
+        <article class="panel dice-panel">
+          <p class="kicker">Connected Dice</p>
+          <div class="die-grid">
+            ${renderDieCard(state.tensDie, "Tens d00")}
+            ${renderDieCard(state.unitsDie, "Units d10")}
+          </div>
         </article>
 
         <article class="panel checklist-panel">
-          <p class="kicker">Host Workflow</p>
+          <p class="kicker">POC Flow</p>
           <ol>
             <li>Run <span>pnpm dev</span> and open app in Chrome.</li>
-            <li>Click connect and choose authorized Pixel.</li>
-            <li>Use RSSI and blink controls to sanity-check link quality.</li>
-            <li>Roll die and watch event log for live face updates.</li>
+            <li>Connect official Pixels d00 and d10 dice.</li>
+            <li>Set target value for test.</li>
+            <li>Roll both dice and watch D% plus SL update.</li>
           </ol>
         </article>
 
@@ -145,20 +144,48 @@ function bindActions() {
       void controller.disconnect();
     });
   appRoot
-    .querySelector<HTMLButtonElement>('[data-action="blink"]')
-    ?.addEventListener("click", () => {
-      void controller.blink();
-    });
-  appRoot
-    .querySelector<HTMLButtonElement>('[data-action="rssi"]')
-    ?.addEventListener("click", () => {
-      void controller.refreshRssi();
-    });
-  appRoot
     .querySelector<HTMLButtonElement>('[data-action="clear-log"]')
     ?.addEventListener("click", () => {
       controller.clearLog();
     });
+  appRoot
+    .querySelector<HTMLInputElement>('[data-action="target"]')
+    ?.addEventListener("input", (event) => {
+      const target = Number((event.currentTarget as HTMLInputElement).value);
+      controller.setTarget(target);
+    });
+}
+
+function renderDieCard(
+  die: {
+    connectionStatus: string;
+    name: string;
+    currentFace: number | null;
+    batteryLevel: number | null;
+    isCharging: boolean;
+  },
+  label: string,
+): string {
+  return `
+    <section class="die-card">
+      <p class="die-label">${label}</p>
+      <p class="die-name">${die.name || "Not connected"}</p>
+      <dl>
+        <div>
+          <dt>Status</dt>
+          <dd>${formatStatus(die.connectionStatus as never)}</dd>
+        </div>
+        <div>
+          <dt>Face</dt>
+          <dd>${formatFace(die.currentFace)}</dd>
+        </div>
+        <div>
+          <dt>Battery</dt>
+          <dd>${formatBattery(die.batteryLevel, die.isCharging)}</dd>
+        </div>
+      </dl>
+    </section>
+  `;
 }
 
 controller.subscribe(render);
