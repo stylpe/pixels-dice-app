@@ -19,3 +19,6 @@
 - VS Code launch: `Edge: Launch Pixels App`.
 - No required extensions identified.
 - Launch step stays pending until user confirms they want debug or run started.
+- Unix-style line endings, LF, for all files.
+- Preserve LF on every edit. CRLF warnings from git/formatters count as regressions to avoid, not harmless noise.
+- After touching files, prefer formatting or save paths that keep existing LF endings intact.
