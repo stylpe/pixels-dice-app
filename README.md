@@ -21,6 +21,21 @@ Host-first browser app starter for Pixels dice using Vite, vanilla TypeScript, p
 - No framework overhead while learning Pixels APIs.
 - Pixels connection logic isolated in `src/pixels` so UI can be swapped later.
 
+## Scope
+
+- Companion app for Warhammer Fantasy Roleplay 4th edition percentile rolls and attack helper flow.
+- Only support official Pixels `d00` and `d10` dice initially. Other devices may work, and considered for official support by demand.
+- Local storage only. No accounts, backend, or database.
+- Designed to stay quick to share on one device rather than model full character management.
+
+## Constraints
+
+- Keep it thin, fast, and framework-light.
+- Mobile first, but still usable on tablet and desktop.
+- Chromium/Web Bluetooth only for now. Safari/iOS support is out of scope unless platform support changes.
+- Prefer simple, responsive interactions over decorative motion.
+- Treat reconnect convenience and troubleshooting as more important than trying to hide host Bluetooth quirks.
+
 ## Run
 
 ```bash
