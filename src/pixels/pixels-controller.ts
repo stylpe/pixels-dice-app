@@ -17,19 +17,19 @@ import {
   setPocTarget,
 } from "../wfrp/poc-session";
 import {
+  createEmptyRoleSlotPatch,
+  createRolePixelPatch,
+  createSyncedRolePatch,
+  getPixelForRole,
+} from "./controller-slots";
+import {
   type AppState,
   createDetachedPixelsPatch,
   createInitialAppState,
   createSessionPatch,
   type LogEntry,
 } from "./controller-state";
-import {
-  createEmptyDieSlot,
-  type DieRole,
-  type DieSlotState,
-  getDieRoleFromType,
-  toDieSlotState,
-} from "./die-slot";
+import { type DieRole, getDieRoleFromType } from "./die-slot";
 import {
   attachPixelEventHandlers,
   detachPixelEventHandlers,
@@ -259,7 +259,7 @@ export class PixelsController {
       return;
     }
 
-    const currentPixel = this.getPixelForRole(role);
+    const currentPixel = getPixelForRole(this.state, role);
     if (currentPixel && currentPixel !== pixel) {
       throw new Error(
         `${capitalize(role)} die already connected. Disconnect first to replace it.`,
@@ -283,7 +283,7 @@ export class PixelsController {
           : this.state.autoReconnectStatus,
       error: null,
     });
-    this.syncRole(role, pixel);
+    this.patch(createSyncedRolePatch(role, pixel));
     persistDieSystemId(role, pixel.systemId);
     this.addLog(
       `${capitalize(role)} die ready${source === "auto" ? " (auto)." : "."}`,
@@ -292,11 +292,11 @@ export class PixelsController {
 
   private attachPixel(role: DieRole, pixel: Pixel) {
     const onStatusChanged = () => {
-      this.syncRole(role, pixel);
+      this.patch(createSyncedRolePatch(role, pixel));
       this.addLog(`${capitalize(role)} die status ${pixel.status}.`);
     };
     const onRollState = (event: PixelRollStateEvent) => {
-      this.syncRole(role, pixel);
+      this.patch(createSyncedRolePatch(role, pixel));
       this.addLog(
         `${capitalize(role)} die ${event.state}; face ${event.face}.`,
       );
@@ -309,7 +309,7 @@ export class PixelsController {
       });
 
       this.applySession(session);
-      this.syncRole(role, pixel);
+      this.patch(createSyncedRolePatch(role, pixel));
       this.addLog(`${capitalize(role)} die rolled ${face}.`);
 
       if (session.latestResult) {
@@ -319,7 +319,7 @@ export class PixelsController {
       }
     };
     const onBattery = (event: PixelBatteryEvent) => {
-      this.syncRole(role, pixel);
+      this.patch(createSyncedRolePatch(role, pixel));
       this.addLog(
         `${capitalize(role)} die battery ${event.level}%${event.isCharging ? ", charging" : ""}.`,
       );
@@ -334,8 +334,8 @@ export class PixelsController {
 
     this.pixelListeners.set(pixel.systemId, handlers);
 
-    this.patchRolePixel(role, pixel);
-    this.syncRole(role, pixel);
+    this.patch(createRolePixelPatch(this.state, role, pixel));
+    this.patch(createSyncedRolePatch(role, pixel));
   }
 
   private detachAllPixels() {
@@ -345,7 +345,7 @@ export class PixelsController {
   }
 
   private detachRole(role: DieRole) {
-    const pixel = this.getPixelForRole(role);
+    const pixel = getPixelForRole(this.state, role);
 
     if (!pixel) {
       return;
@@ -358,34 +358,7 @@ export class PixelsController {
       this.pixelListeners.delete(pixel.systemId);
     }
 
-    this.patch({
-      [role === "tens" ? "tensDie" : "unitsDie"]: createEmptyDieSlot(role),
-    } as Partial<AppState>);
-  }
-
-  private syncRole(role: DieRole, pixel: Pixel) {
-    const slot = toDieSlotState(role, pixel);
-
-    this.patch({
-      [role === "tens" ? "tensDie" : "unitsDie"]: slot,
-    } as Partial<AppState>);
-  }
-
-  private patchRolePixel(role: DieRole, pixel: Pixel) {
-    this.patch({
-      [role === "tens" ? "tensDie" : "unitsDie"]: {
-        ...this.getSlot(role),
-        pixel,
-      },
-    } as Partial<AppState>);
-  }
-
-  private getPixelForRole(role: DieRole): Pixel | null {
-    return this.getSlot(role).pixel;
-  }
-
-  private getSlot(role: DieRole): DieSlotState {
-    return role === "tens" ? this.state.tensDie : this.state.unitsDie;
+    this.patch(createEmptyRoleSlotPatch(role));
   }
 
   private patch(patch: Partial<AppState>) {
