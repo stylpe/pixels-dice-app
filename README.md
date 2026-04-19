@@ -1,5 +1,9 @@
 # Pixels Dice Lab
 
+[![CI](https://github.com/stylpe/pixels-dice-app/actions/workflows/ci.yml/badge.svg)](https://github.com/stylpe/pixels-dice-app/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/stylpe/pixels-dice-app/actions/workflows/codeql.yml/badge.svg)](https://github.com/stylpe/pixels-dice-app/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/stylpe/pixels-dice-app/blob/main/LICENSE.txt)
+
 Host-first browser app starter for Pixels dice using Vite, vanilla TypeScript, pnpm, Biome, Vitest, and Playwright.
 
 ## Stack
