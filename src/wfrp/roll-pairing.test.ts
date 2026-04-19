@@ -71,6 +71,8 @@ describe("registerRoll", () => {
       roll: 54,
       at: 1_180,
     });
+    expect(afterUnits.pendingTensRoll).toBeNull();
+    expect(afterUnits.pendingUnitsRoll).toBeNull();
   });
 
   it("does not pair rolls outside pairing window", () => {
@@ -100,5 +102,49 @@ describe("registerRoll", () => {
     });
 
     expect(afterUnits.lastResult).toBeNull();
+    expect(afterUnits.pendingTensRoll).toBeNull();
+    expect(afterUnits.pendingUnitsRoll?.face).toBe(4);
+  });
+
+  it("drops stale older roll after timeout so next throw cannot pair with it", () => {
+    const initial = registerDie(
+      registerDie(createEmptyRollPairingState(), {
+        systemId: "tens-1",
+        dieType: "d00",
+        name: "Pixels Tens",
+      }),
+      {
+        systemId: "units-1",
+        dieType: "d10",
+        name: "Pixels Units",
+      },
+    );
+
+    const afterOldTens = registerRoll(initial, {
+      systemId: "tens-1",
+      face: 50,
+      at: 1_000,
+    });
+
+    const afterLateUnits = registerRoll(afterOldTens, {
+      systemId: "units-1",
+      face: 4,
+      at: 1_500,
+    });
+
+    const afterFreshTens = registerRoll(afterLateUnits, {
+      systemId: "tens-1",
+      face: 70,
+      at: 1_620,
+    });
+
+    expect(afterFreshTens.lastResult).toEqual({
+      tens: 70,
+      units: 4,
+      roll: 74,
+      at: 1_620,
+    });
+    expect(afterFreshTens.pendingTensRoll).toBeNull();
+    expect(afterFreshTens.pendingUnitsRoll).toBeNull();
   });
 });

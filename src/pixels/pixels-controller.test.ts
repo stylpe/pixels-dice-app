@@ -45,6 +45,7 @@ class FakePixel {
   currentFace: number | null = null;
   batteryLevel: number | null = null;
   isCharging = false;
+  failDisconnect = false;
   private listeners = new Map<string, Set<(...args: Array<unknown>) => void>>();
 
   constructor(systemId: string, dieType: string, name: string) {
@@ -73,6 +74,10 @@ class FakePixel {
   }
 
   async disconnect() {
+    if (this.failDisconnect) {
+      throw new Error(`${this.name} disconnect failed`);
+    }
+
     this.status = "disconnected";
   }
 }
@@ -201,5 +206,39 @@ describe("pixels controller autoconnect", () => {
     expect(state.latestResult).toBeNull();
     expect(state.error).toBeNull();
     expect(state.eventLog[0]?.message).toBe("Disconnected dice.");
+  });
+
+  it("disconnect still clears already-disconnected dice when one disconnect fails", async () => {
+    const tens = new FakePixel("tens-1", "d00", "Tens");
+    const units = new FakePixel("units-1", "d10", "Units");
+
+    units.failDisconnect = true;
+    mockRequestPixel.mockResolvedValueOnce(tens).mockResolvedValueOnce(units);
+
+    const controller = new PixelsController();
+
+    await controller.connect();
+    await controller.connect();
+    await controller.disconnect();
+
+    const state = controller.getState();
+
+    expect(state.tensDie.pixel).toBeNull();
+    expect(state.error).toBe("Units disconnect failed");
+  });
+
+  it("disconnects unsupported dice instead of leaving them connected unmanaged", async () => {
+    const weird = new FakePixel("weird-1", "d20", "Weird");
+
+    mockRequestPixel.mockResolvedValue(weird);
+
+    const controller = new PixelsController();
+
+    await controller.connect();
+
+    expect(weird.status).toBe("disconnected");
+    expect(controller.getState().tensDie.pixel).toBeNull();
+    expect(controller.getState().unitsDie.pixel).toBeNull();
+    expect(controller.getState().error).toContain("Unsupported die type");
   });
 });

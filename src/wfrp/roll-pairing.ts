@@ -127,14 +127,20 @@ function pairRolls(state: RollPairingState): RollPairingState {
   const timeDelta = Math.abs(pendingTensRoll.at - pendingUnitsRoll.at);
 
   if (timeDelta > PAIRING_WINDOW_MS) {
+    const keepTensRoll = pendingTensRoll.at > pendingUnitsRoll.at;
+
     return {
       ...state,
+      pendingTensRoll: keepTensRoll ? pendingTensRoll : null,
+      pendingUnitsRoll: keepTensRoll ? null : pendingUnitsRoll,
       lastResult: null,
     };
   }
 
   return {
     ...state,
+    pendingTensRoll: null,
+    pendingUnitsRoll: null,
     lastResult: {
       tens: pendingTensRoll.face,
       units: pendingUnitsRoll.face,

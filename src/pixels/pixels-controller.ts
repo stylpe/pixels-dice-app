@@ -162,25 +162,37 @@ export class PixelsController {
   }
 
   async disconnect() {
-    const pixels = [this.state.tensDie.pixel, this.state.unitsDie.pixel].filter(
-      (pixel): pixel is Pixel => pixel !== null,
-    );
+    const tensPixel = this.state.tensDie.pixel;
+    const unitsPixel = this.state.unitsDie.pixel;
 
-    if (pixels.length === 0) {
+    if (!tensPixel && !unitsPixel) {
       return;
     }
 
     this.patch({ busy: true, error: null });
 
     try {
-      await Promise.all(pixels.map((pixel) => pixel.disconnect()));
-      this.detachAllPixels();
-      this.addLog("Disconnected dice.");
-    } catch (error) {
-      const errorMessage = this.normalizeError(error);
+      const disconnectResults = await Promise.allSettled([
+        disconnectRolePixel(tensPixel),
+        disconnectRolePixel(unitsPixel),
+      ]);
 
-      this.patch({ error: errorMessage });
-      this.addLog(getDisconnectFailedMessage(errorMessage));
+      const disconnectErrors = [
+        this.applyDisconnectResult("tens", tensPixel, disconnectResults[0]),
+        this.applyDisconnectResult("units", unitsPixel, disconnectResults[1]),
+      ].filter((errorMessage): errorMessage is string => errorMessage !== null);
+
+      this.patch(createDetachedPixelsPatch());
+
+      if (disconnectErrors.length > 0) {
+        const errorMessage = disconnectErrors.join("; ");
+
+        this.patch({ error: errorMessage });
+        this.addLog(getDisconnectFailedMessage(errorMessage));
+        return;
+      }
+
+      this.addLog("Disconnected dice.");
     } finally {
       this.patch({ busy: false });
     }
@@ -278,6 +290,7 @@ export class PixelsController {
           "Unsupported die type for v1. Official Pixels d10 and d00 required.",
       });
       this.addLog(getRejectedDieTypeMessage(dieType));
+      await pixel.disconnect();
       return;
     }
 
@@ -350,12 +363,6 @@ export class PixelsController {
     this.patch(createSyncedRolePatch(role, pixel));
   }
 
-  private detachAllPixels() {
-    this.detachRole("tens");
-    this.detachRole("units");
-    this.patch(createDetachedPixelsPatch());
-  }
-
   private detachRole(role: DieRole) {
     const pixel = getPixelForRole(this.state, role);
 
@@ -371,6 +378,23 @@ export class PixelsController {
     }
 
     this.patch(createEmptyRoleSlotPatch(role));
+  }
+
+  private applyDisconnectResult(
+    role: DieRole,
+    pixel: Pixel | null,
+    result: PromiseSettledResult<void> | undefined,
+  ): string | null {
+    if (!pixel) {
+      return null;
+    }
+
+    if (result?.status === "fulfilled") {
+      this.detachRole(role);
+      return null;
+    }
+
+    return this.normalizeError(result?.reason);
   }
 
   private patch(patch: Partial<AppState>) {
@@ -422,4 +446,12 @@ function clampSignedNumber(value: number): number {
   }
 
   return Math.round(value);
+}
+
+async function disconnectRolePixel(pixel: Pixel | null): Promise<void> {
+  if (!pixel) {
+    return;
+  }
+
+  await pixel.disconnect();
 }
