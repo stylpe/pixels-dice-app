@@ -288,22 +288,22 @@ function renderResultDetails(
 ): string {
   if (!state.latestResult) {
     return `
-      <dl class="result-details muted-details">
-        <div><dt>Target</dt><dd>${state.target}</dd></div>
-        <div><dt>Status</dt><dd>Waiting for roll</dd></div>
-      </dl>
+      <p class="result-facts-line muted-details">
+        <span><strong>Target</strong> ${state.target}</span>
+        <span><strong>Status</strong> Waiting for roll</span>
+      </p>
     `;
   }
 
   const detailItems = state.attackMode
     ? `
-        <div><dt>Damage</dt><dd>${state.latestResult.rawDamage ?? "--"}</dd></div>
-        <div><dt>Hit</dt><dd>${state.latestResult.hitLocation ?? (state.latestResult.isCritical ? "Reroll needed" : "--")}</dd></div>
-        <div><dt>Special</dt><dd>${state.latestResult.isCritical ? "Critical" : state.latestResult.isFumble ? "Fumble" : "None"}</dd></div>
+        <span><strong>Damage</strong> ${state.latestResult.rawDamage ?? "--"}</span>
+        <span><strong>Hit</strong> ${state.latestResult.hitLocation ?? (state.latestResult.isCritical ? "Reroll needed" : "--")}</span>
+        <span><strong>Special</strong> ${state.latestResult.isCritical ? "Critical" : state.latestResult.isFumble ? "Fumble" : "None"}</span>
       `
     : `
-        <div><dt>Target</dt><dd>${state.latestResult.target}</dd></div>
-        <div><dt>Outcome</dt><dd>${getOutcomeLabel(state.latestResult)}</dd></div>
+        <span><strong>Target</strong> ${state.latestResult.target}</span>
+        <span><strong>Outcome</strong> ${getOutcomeLabel(state.latestResult)}</span>
       `;
 
   const note =
@@ -314,9 +314,9 @@ function renderResultDetails(
         : "";
 
   return `
-    <dl class="result-details ${state.attackMode ? "" : "muted-details"}">
+    <p class="result-facts-line ${state.attackMode ? "" : "muted-details"}">
       ${detailItems}
-    </dl>
+    </p>
     ${note}
   `;
 }

@@ -86,7 +86,7 @@ input {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line);
-  padding: 0.7rem 0.75rem;
+  padding: 0.62rem 0.65rem;
   background: rgba(255, 255, 255, 0.55);
   color: var(--text);
 }
@@ -110,15 +110,15 @@ input[aria-invalid="true"] {
 
 .app-shell {
   min-height: 100vh;
-  padding: max(0.65rem, env(safe-area-inset-top))
-    max(0.65rem, env(safe-area-inset-right))
+  padding: max(0.35rem, env(safe-area-inset-top))
+    max(0.35rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom))
-    max(0.65rem, env(safe-area-inset-left));
+    max(0.35rem, env(safe-area-inset-left));
 }
 
 .control-deck {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.45rem;
   width: min(1200px, 100%);
   margin: 0 auto;
 }
@@ -129,18 +129,21 @@ input[aria-invalid="true"] {
 .primary-actions,
 .lower-deck,
 .tools-panel {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: 0 10px 30px var(--shadow);
+  border-top: 1px solid var(--line);
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  border-left: 0;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
 }
 
 .status-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.35rem;
   width: min(1200px, 100%);
-  margin: 0 auto 0.75rem;
-  padding: 0.5rem;
+  margin: 0 auto 0.35rem;
+  padding: 0.3rem 0;
 }
 
 .die-chip,
@@ -148,9 +151,9 @@ input[aria-invalid="true"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  min-height: 3.35rem;
-  padding: 0.55rem 0.7rem;
+  gap: 0.45rem;
+  min-height: 2.7rem;
+  padding: 0.4rem 0.5rem;
   border: 1px solid rgba(34, 26, 19, 0.12);
   background: rgba(255, 255, 255, 0.34);
 }
@@ -182,9 +185,9 @@ input[aria-invalid="true"] {
 .reconnect-chip {
   justify-content: center;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -289,19 +292,19 @@ input[aria-invalid="true"] {
 .result-hero,
 .primary-actions,
 .lower-deck {
-  padding: 0.75rem;
+  padding: 0.5rem 0;
 }
 
 .mode-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
 }
 
 .mode-pill {
   min-width: 0;
-  padding: 0.65rem 0.8rem;
+  padding: 0.6rem 0.4rem;
 }
 
 .mode-pill.is-hidden {
@@ -315,7 +318,7 @@ input[aria-invalid="true"] {
 .input-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.4rem;
 }
 
 .input-grid.attack-active {
@@ -324,7 +327,7 @@ input[aria-invalid="true"] {
 
 .compact-field {
   display: grid;
-  gap: 0.28rem;
+  gap: 0.14rem;
 }
 
 .compact-field span,
@@ -333,8 +336,8 @@ input[aria-invalid="true"] {
 .tools-label,
 .result-details dt {
   color: var(--muted);
-  font-size: 0.76rem;
-  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -344,63 +347,76 @@ input[aria-invalid="true"] {
 
 .result-hero {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.9rem;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent),
     var(--surface-strong);
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  padding: 1.15rem 0.95rem 1rem;
+  box-shadow: 0 8px 24px rgba(20, 12, 6, 0.08);
 }
 
 .result-mainline {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.8rem;
-  align-items: end;
+  gap: 1rem;
+  align-items: center;
 }
 
 .result-roll {
   margin: 0;
-  font: 700 clamp(3.5rem, 11vw, 7rem) / 0.9 var(--display);
+  font: 700 clamp(3.8rem, 11vw, 6.8rem) / 0.9 var(--display);
   letter-spacing: -0.05em;
 }
 
 .result-copy {
   display: grid;
-  gap: 0.2rem;
+  gap: 0.22rem;
+  min-width: 0;
+  align-content: center;
 }
 
 .result-summary-line {
   margin: 0;
-  font: 700 clamp(1.1rem, 3vw, 1.55rem) / 1.15 var(--display);
+  font: 700 clamp(1.2rem, 3vw, 1.65rem) / 1.08 var(--display);
+  text-wrap: balance;
 }
 
 .result-detail-line {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.8rem;
-  margin: 0;
-  color: var(--muted);
-}
-
-.result-details {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
   margin: 0;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 1.05rem;
 }
 
-.result-details.muted-details {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.result-details dd,
-.result-details dt {
+.result-facts-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
   margin: 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: 1.06rem;
 }
 
-.result-details dd {
-  font-weight: 700;
+.result-facts-line.muted-details {
+  gap: 0.45rem 1rem;
+}
+
+.result-facts-line span {
+  white-space: nowrap;
+}
+
+.result-facts-line strong {
+  margin-right: 0.35rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .result-note,
@@ -434,7 +450,11 @@ input[aria-invalid="true"] {
 .primary-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.35rem;
+}
+
+.primary-actions button {
+  flex: 1 1 0;
 }
 
 .tools-trigger {
@@ -446,7 +466,7 @@ input[aria-invalid="true"] {
 .lower-deck {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
-  gap: 0.75rem;
+  gap: 0.45rem;
 }
 
 .dice-telemetry {
@@ -455,8 +475,11 @@ input[aria-invalid="true"] {
 }
 
 .telemetry-row {
-  padding: 0.7rem;
-  border: 1px solid rgba(34, 26, 19, 0.12);
+  padding: 0.55rem 0.65rem;
+  border-top: 1px solid rgba(34, 26, 19, 0.12);
+  border-right: 0;
+  border-bottom: 1px solid rgba(34, 26, 19, 0.12);
+  border-left: 0;
 }
 
 .telemetry-head {
@@ -507,8 +530,11 @@ input[aria-invalid="true"] {
 }
 
 .log-section {
-  border: 1px solid rgba(34, 26, 19, 0.12);
-  background: rgba(255, 255, 255, 0.34);
+  border-top: 1px solid rgba(34, 26, 19, 0.12);
+  border-right: 0;
+  border-bottom: 1px solid rgba(34, 26, 19, 0.12);
+  border-left: 0;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .log-toggle {
@@ -558,6 +584,9 @@ input[aria-invalid="true"] {
   width: min(720px, 100%);
   padding: 1rem;
   background: var(--surface-strong);
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  box-shadow: 0 14px 36px rgba(20, 12, 6, 0.16);
 }
 
 .tools-header {
@@ -607,14 +636,6 @@ input[aria-invalid="true"] {
     grid-template-columns: 1fr;
   }
 
-  .result-mainline {
-    grid-template-columns: 1fr;
-  }
-
-  .result-details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .tools-grid {
     grid-template-columns: 1fr;
   }
@@ -626,18 +647,18 @@ input[aria-invalid="true"] {
   }
 
   .status-strip {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .reconnect-chip {
-    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(4.7rem, 0.82fr);
   }
 
   .input-grid,
   .input-grid.attack-active,
-  .result-details,
-  .result-details.muted-details {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .result-facts-line,
+  .result-facts-line.muted-details {
+    gap: 0.4rem 0.8rem;
+  }
+
+  .mode-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .critical-reroll-field {
@@ -647,8 +668,8 @@ input[aria-invalid="true"] {
 
 @media (max-width: 520px) {
   .app-shell {
-    padding-left: 0.4rem;
-    padding-right: 0.4rem;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
   }
 
   .status-strip,
@@ -657,32 +678,120 @@ input[aria-invalid="true"] {
   .primary-actions,
   .lower-deck,
   .tools-panel {
-    padding: 0.65rem;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
   }
 
   .status-strip {
-    gap: 0.35rem;
+    gap: 0.25rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(4.15rem, 0.72fr);
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
   }
 
   .die-chip,
   .reconnect-chip {
-    min-height: 3rem;
-    padding: 0.45rem 0.55rem;
+    min-height: 3.05rem;
+    padding: 0.42rem 0.48rem;
+  }
+
+  .die-glyph {
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
+  .die-glyph text {
+    font-size: 12px;
+  }
+
+  .reconnect-chip {
+    font-size: 0.8rem;
+  }
+
+  .signal-bars {
+    height: 1.15rem;
+  }
+
+  .signal-bar {
+    width: 0.24rem;
+  }
+
+  .battery-shell {
+    grid-template-columns: repeat(5, 0.2rem);
+    min-height: 0.92rem;
   }
 
   .input-grid,
-  .input-grid.attack-active,
-  .result-details,
-  .result-details.muted-details,
+  .result-facts-line,
+  .result-facts-line.muted-details,
   .telemetry-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .input-grid.attack-active {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .input-grid.attack-active .critical-reroll-field {
+    grid-column: 1 / -1;
+  }
+
+  .mode-row {
+    gap: 0.25rem;
+  }
+
+  .mode-pill,
+  .primary-actions button,
+  .log-toggle {
+    padding-left: 0.58rem;
+    padding-right: 0.58rem;
+  }
+
+  .mode-pill {
+    min-height: 3.05rem;
+    font-size: 1.12rem;
+  }
+
+  .compact-field span {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  .compact-field input {
+    min-height: 3rem;
+    padding: 0.62rem 0.55rem;
+    font-size: 1.08rem;
   }
 
   .primary-actions button {
-    width: 100%;
+    min-width: 0;
   }
 
   .result-roll {
-    font-size: clamp(3rem, 16vw, 5rem);
+    font-size: clamp(4.1rem, 18vw, 5.9rem);
+  }
+
+  .result-summary-line {
+    font-size: 1.32rem;
+  }
+
+  .result-detail-line,
+  .result-facts-line {
+    font-size: 1.18rem;
+  }
+
+  .result-facts-line strong {
+    font-size: 0.84rem;
+  }
+
+  .result-hero {
+    padding-top: 1.28rem;
+    padding-right: 1rem;
+    padding-bottom: 1.1rem;
+    padding-left: 1rem;
+  }
+
+  .result-mainline {
+    gap: 1.1rem;
   }
 }
