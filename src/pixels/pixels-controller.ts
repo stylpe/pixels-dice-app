@@ -299,10 +299,6 @@ export class PixelsController {
       throw new Error(getDieAlreadyConnectedMessage(role));
     }
 
-    if (currentPixel !== pixel) {
-      this.attachPixel(role, pixel);
-    }
-
     const session = registerPocDie(this.state.session, {
       systemId: pixel.systemId,
       dieType,
@@ -316,6 +312,11 @@ export class PixelsController {
           : this.state.autoReconnectStatus,
       error: null,
     });
+
+    if (currentPixel !== pixel) {
+      this.attachPixel(role, pixel);
+    }
+
     this.patch(createSyncedRolePatch(role, pixel));
     persistDieSystemId(role, pixel.systemId);
     this.addLog(getDieReadyMessage(role, source));

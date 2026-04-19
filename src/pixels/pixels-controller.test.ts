@@ -46,6 +46,7 @@ class FakePixel {
   batteryLevel: number | null = null;
   isCharging = false;
   failDisconnect = false;
+  onAddEventListener: ((event: string) => void) | null = null;
   private listeners = new Map<string, Set<(...args: Array<unknown>) => void>>();
 
   constructor(systemId: string, dieType: string, name: string) {
@@ -58,6 +59,7 @@ class FakePixel {
     const listeners = this.listeners.get(event) ?? new Set();
     listeners.add(listener);
     this.listeners.set(event, listeners);
+    this.onAddEventListener?.(event);
   }
 
   removeEventListener(
@@ -240,5 +242,25 @@ describe("pixels controller autoconnect", () => {
     expect(controller.getState().tensDie.pixel).toBeNull();
     expect(controller.getState().unitsDie.pixel).toBeNull();
     expect(controller.getState().error).toContain("Unsupported die type");
+  });
+
+  it("registers die before listeners can handle immediate roll events", async () => {
+    const tens = new FakePixel("tens-1", "d00", "Tens");
+    const units = new FakePixel("units-1", "d10", "Units");
+
+    units.onAddEventListener = (event) => {
+      if (event === "roll") {
+        tens.emit("roll", 70);
+        units.emit("roll", 4);
+      }
+    };
+    mockRequestPixel.mockResolvedValueOnce(tens).mockResolvedValueOnce(units);
+
+    const controller = new PixelsController();
+
+    await controller.connect();
+    await controller.connect();
+
+    expect(controller.getState().latestResult?.roll).toBe(74);
   });
 });
