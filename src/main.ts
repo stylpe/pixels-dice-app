@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp, createIcons, Wrench, X } from "lucide";
 import "./style.css";
 import {
   formatBattery,
@@ -35,6 +36,10 @@ type DraftFieldState = {
 };
 
 const fieldDrafts: Partial<Record<DraftFieldAction, string>> = {};
+const uiState = {
+  toolsOpen: false,
+  logExpanded: false,
+};
 
 function render() {
   const focusState = captureFocusState();
@@ -44,6 +49,18 @@ function render() {
     String(state.target),
     parseTargetDraft,
     focusState?.action === "target",
+  );
+  const damageBonusField = getDraftFieldState(
+    "damage-bonus",
+    String(state.damageBonus),
+    parseUnsignedDraft,
+    focusState?.action === "damage-bonus",
+  );
+  const defenderSuccessLevelsField = getDraftFieldState(
+    "defender-success-levels",
+    String(state.defenderSuccessLevels),
+    parseSignedDraft,
+    focusState?.action === "defender-success-levels",
   );
   const criticalHitLocationField = getDraftFieldState(
     "critical-hit-location-roll",
@@ -57,156 +74,384 @@ function render() {
   const disconnectDisabled =
     state.busy || (!state.tensDie.pixel && !state.unitsDie.pixel);
   const resultTone = getResultTone(state.latestResult);
-  const attackPanel = state.attackMode
-    ? renderAttackPanel(state.latestResult)
-    : "";
+  const shownLogEntries = uiState.logExpanded
+    ? state.eventLog
+    : state.eventLog.slice(0, 3);
+  const latestRollValue = state.latestResult ? state.latestResult.roll : "--";
+  const latestDiceValue = state.latestResult
+    ? `${state.latestResult.tens} + ${state.latestResult.units}`
+    : "--";
   const critLocationPrompt =
     state.attackMode && state.latestResult?.isCritical
-      ? `
-        <label class="target-field compact-field">
-          <span>Crit Location Reroll</span>
-          <input
-            type="text"
-            inputmode="numeric"
-            value="${escapeAttribute(criticalHitLocationField.value)}"
-            placeholder="Roll 1-100"
-            data-action="critical-hit-location-roll"
-            aria-invalid="${criticalHitLocationField.invalid}"
-            class="${criticalHitLocationField.invalid ? "is-invalid" : ""}"
-          />
-        </label>
-      `
+      ? renderInputField(
+          "Crit Reroll",
+          "critical-hit-location-roll",
+          criticalHitLocationField,
+          false,
+          "critical-reroll-field",
+          "1-100",
+        )
       : "";
 
   appRoot.innerHTML = `
-    <div class="shell">
-      <section class="hero-panel panel">
-        <div class="hero-copy">
-          <p class="eyebrow">Pixels WFRP V1</p>
-          <h1>Run WFRP tests with connected Pixels dice.</h1>
-          <p class="lede">
-            Plain d% and attack helper mode. Connect official Pixels d00 and d10 dice,
-            then resolve target, SL, hit location, and raw damage in one pass.
-          </p>
-          <div class="action-row">
-            <button data-action="connect" ${connectDisabled ? "disabled" : ""}>
-              ${state.busy ? "Working..." : "Connect Die"}
+    <div class="app-shell tone-${resultTone}">
+      <header class="status-strip">
+        ${renderDieStatusChip(state.tensDie, "d00")}
+        ${renderDieStatusChip(state.unitsDie, "d10")}
+        ${renderReconnectBadge(state.autoReconnectStatus)}
+      </header>
+
+      <main class="control-deck">
+        <section class="mode-inputs">
+          <div class="mode-row" role="tablist" aria-label="Roll mode">
+            <button
+              class="mode-pill ${state.attackMode ? "ghost" : "is-active"}"
+              data-action="mode-plain"
+            >
+              Plain d%
             </button>
             <button
-              class="ghost"
-              data-action="disconnect"
-              ${disconnectDisabled ? "disabled" : ""}
+              class="mode-pill ${state.attackMode ? "is-active" : "ghost"}"
+              data-action="mode-attack"
             >
-              Disconnect Dice
+              Attack
+            </button>
+            <button
+              class="mode-pill ${state.isOpposed ? "is-active" : "ghost"} ${state.attackMode ? "" : "is-hidden"}"
+              data-action="toggle-opposed"
+              ${state.attackMode ? "" : "disabled"}
+            >
+              Opposed
             </button>
           </div>
-          <div class="config-grid">
-            <label class="target-field">
-              <span>Target</span>
-              <input
-                type="text"
-                inputmode="numeric"
-                value="${escapeAttribute(targetField.value)}"
-                data-action="target"
-                aria-invalid="${targetField.invalid}"
-                class="${targetField.invalid ? "is-invalid" : ""}"
-              />
-            </label>
-            <div class="mode-card">
-              <p class="mode-label">Mode</p>
-              <div class="toggle-row">
-                <button
-                  class="${state.attackMode ? "ghost" : "toggle-active"}"
-                  data-action="mode-plain"
-                >
-                  Plain d%
-                </button>
-                <button
-                  class="${state.attackMode ? "toggle-active" : "ghost"}"
-                  data-action="mode-attack"
-                >
-                  Attack Helper
-                </button>
-              </div>
+
+          <div class="input-grid ${state.attackMode ? "attack-active" : ""}">
+            ${renderInputField("Target", "target", targetField, false, "", "1-100")}
+            ${state.attackMode ? renderInputField("Damage", "damage-bonus", damageBonusField, false, "", "0") : ""}
+            ${state.attackMode ? renderInputField("Opp SL", "defender-success-levels", defenderSuccessLevelsField, !state.isOpposed, "", "0") : ""}
+            ${critLocationPrompt}
+          </div>
+        </section>
+
+        <section class="result-hero result-${resultTone}">
+          <div class="result-mainline">
+            <p class="result-roll">${latestRollValue}</p>
+            <div class="result-copy">
+              <p class="result-summary-line">${getResultSummary(state.latestResult)}</p>
+              <p class="result-detail-line">
+                <span>SL ${state.latestResult ? state.latestResult.successLevels : "--"}</span>
+                <span>Dice ${latestDiceValue}</span>
+              </p>
             </div>
           </div>
-          ${state.attackMode ? renderAttackFields(state) : ""}
-          ${critLocationPrompt}
-          ${state.attackMode ? '<p class="attack-note">Attack-only rules active: crit/fumble, hit location, and raw damage before armor/TB.</p>' : ""}
-          <p class="support-note">${formatCapabilities(state.capabilities)}</p>
-          ${state.autoReconnectStatus ? `<p class="subtle reconnect-note">${state.autoReconnectStatus}</p>` : ""}
-          ${state.error ? `<p class="error-banner">${state.error}</p>` : ""}
-        </div>
-        <div class="signal-card">
-          <p class="signal-label">Latest Result</p>
-          <p class="signal-value result-${resultTone}">${state.latestResult ? state.latestResult.roll : "--"}</p>
-          <p class="result-summary">${getResultSummary(state.latestResult)}</p>
-          <dl class="signal-grid result-grid">
-            <div>
-              <dt>Target</dt>
-              <dd>${state.target}</dd>
-            </div>
-            <div>
-              <dt>SL</dt>
-              <dd>${state.latestResult ? state.latestResult.successLevels : "--"}</dd>
-            </div>
-            <div>
-              <dt>Outcome</dt>
-              <dd>${getOutcomeLabel(state.latestResult)}</dd>
-            </div>
-            <div>
-              <dt>Dice</dt>
-              <dd>${state.latestResult ? `${state.latestResult.tens} + ${state.latestResult.units}` : "--"}</dd>
-            </div>
-          </dl>
-          ${attackPanel}
-        </div>
-      </section>
+          ${renderResultDetails(state)}
+          ${state.error ? `<p class="error-banner">${escapeHtml(state.error)}</p>` : ""}
+        </section>
 
-      <section class="dashboard-grid">
-        <article class="panel dice-panel">
-          <p class="kicker">Connected Dice</p>
-          <div class="die-grid">
-            ${renderDieCard(state.tensDie, "Tens d00")}
-            ${renderDieCard(state.unitsDie, "Units d10")}
-          </div>
-        </article>
+        <section class="primary-actions">
+          <button data-action="connect" ${connectDisabled ? "disabled" : ""}>
+            ${state.busy ? "Working..." : disconnectDisabled ? "Connect Dice" : "Connect More"}
+          </button>
+          <button
+            class="ghost"
+            data-action="disconnect"
+            ${disconnectDisabled ? "disabled" : ""}
+          >
+            Disconnect
+          </button>
+          <button class="ghost tools-trigger" data-action="toggle-tools">
+            <i data-lucide="wrench"></i>
+            Tools
+          </button>
+        </section>
 
-        <article class="panel checklist-panel">
-          <p class="kicker">V1 Flow</p>
-          <ol>
-            <li>Run <span>pnpm dev</span> and open app in Chrome.</li>
-            <li>Connect official Pixels d00 and d10 dice.</li>
-            <li>Choose plain d% or attack helper mode.</li>
-            <li>Set target and attack values if needed.</li>
-            <li>Roll both dice and watch result panel resolve.</li>
-          </ol>
-        </article>
+        <section class="lower-deck">
+          <section class="dice-telemetry">
+            ${renderDieTelemetry(state.tensDie, "Tens d00")}
+            ${renderDieTelemetry(state.unitsDie, "Units d10")}
+          </section>
 
-        <article class="panel log-panel">
-          <div class="panel-head">
-            <p class="kicker">Event Log</p>
-            <button class="ghost small" data-action="clear-log">Clear</button>
-          </div>
-          <ul class="event-log">
-            ${state.eventLog
-              .map(
-                (entry) => `
-                  <li>
-                    <span class="timestamp">${entry.at}</span>
-                    <span>${escapeHtml(entry.message)}</span>
-                  </li>
-                `,
-              )
-              .join("")}
-          </ul>
-        </article>
-      </section>
+          <section class="log-section ${uiState.logExpanded ? "is-open" : ""}">
+            <button class="log-toggle" data-action="toggle-log">
+              <span>Event Log</span>
+              <i data-lucide="${uiState.logExpanded ? "chevron-up" : "chevron-down"}"></i>
+            </button>
+            <ul class="event-log">
+              ${shownLogEntries
+                .map(
+                  (entry) => `
+                    <li>
+                      <span class="timestamp">${entry.at}</span>
+                      <span>${escapeHtml(entry.message)}</span>
+                    </li>
+                  `,
+                )
+                .join("")}
+            </ul>
+          </section>
+        </section>
+      </main>
+
+      ${uiState.toolsOpen ? renderToolsOverlay(state) : ""}
     </div>
   `;
 
+  createIcons({
+    icons: {
+      Wrench,
+      X,
+      ChevronDown,
+      ChevronUp,
+    },
+    attrs: {
+      width: "18",
+      height: "18",
+      strokeWidth: "1.75",
+    },
+  });
+
   bindActions();
   restoreFocusState(focusState);
+}
+
+function renderInputField(
+  label: string,
+  action: DraftFieldAction,
+  field: DraftFieldState,
+  disabled = false,
+  extraClass = "",
+  placeholder = "",
+): string {
+  return `
+    <label class="compact-field ${disabled ? "is-disabled" : ""} ${extraClass}">
+      <span>${label}</span>
+      <input
+        type="text"
+        inputmode="numeric"
+        value="${escapeAttribute(field.value)}"
+        placeholder="${escapeAttribute(placeholder)}"
+        data-action="${action}"
+        aria-invalid="${field.invalid}"
+        class="${field.invalid ? "is-invalid" : ""}"
+        ${disabled ? "disabled" : ""}
+      />
+    </label>
+  `;
+}
+
+function renderDieStatusChip(
+  die: ReturnType<PixelsController["getState"]>["tensDie"],
+  label: "d00" | "d10",
+): string {
+  return `
+    <section class="die-chip state-${getDieStateTone(die.connectionStatus)}">
+      ${renderDieGlyph(label)}
+      <div class="die-chip-icons">
+        ${renderConnectionGlyph(die.connectionStatus)}
+        ${renderBatteryGlyph(die.batteryLevel, die.isCharging)}
+      </div>
+    </section>
+  `;
+}
+
+function renderReconnectBadge(status: string | null): string {
+  if (!status) {
+    return '<section class="reconnect-chip state-idle"><span>Saved off</span></section>';
+  }
+
+  const normalized = status.toLowerCase();
+  const tone =
+    normalized.includes("unavailable") || normalized.includes("failed")
+      ? "warning"
+      : normalized.includes("saved") ||
+          normalized.includes("ready") ||
+          normalized.includes("reconnected")
+        ? "active"
+        : "idle";
+  const shortLabel = normalized.includes("unavailable")
+    ? "Reconnect !"
+    : normalized.includes("saved") ||
+        normalized.includes("ready") ||
+        normalized.includes("reconnected")
+      ? "Saved on"
+      : "Saved off";
+
+  return `
+    <section class="reconnect-chip state-${tone}">
+      <span>${shortLabel}</span>
+    </section>
+  `;
+}
+
+function renderResultDetails(
+  state: ReturnType<PixelsController["getState"]>,
+): string {
+  if (!state.latestResult) {
+    return `
+      <dl class="result-details muted-details">
+        <div><dt>Target</dt><dd>${state.target}</dd></div>
+        <div><dt>Status</dt><dd>Waiting for roll</dd></div>
+      </dl>
+    `;
+  }
+
+  const detailItems = state.attackMode
+    ? `
+        <div><dt>Damage</dt><dd>${state.latestResult.rawDamage ?? "--"}</dd></div>
+        <div><dt>Hit</dt><dd>${state.latestResult.hitLocation ?? (state.latestResult.isCritical ? "Reroll needed" : "--")}</dd></div>
+        <div><dt>Special</dt><dd>${state.latestResult.isCritical ? "Critical" : state.latestResult.isFumble ? "Fumble" : "None"}</dd></div>
+      `
+    : `
+        <div><dt>Target</dt><dd>${state.latestResult.target}</dd></div>
+        <div><dt>Outcome</dt><dd>${getOutcomeLabel(state.latestResult)}</dd></div>
+      `;
+
+  const note =
+    state.latestResult.resolution === "tie-breaker"
+      ? '<p class="result-note">Tie on SL. Compare skill or characteristic to settle outcome.</p>'
+      : state.attackMode && state.latestResult.rawDamage !== null
+        ? `<p class="result-note">${renderDamageFormulaText(state.latestResult)}</p>`
+        : "";
+
+  return `
+    <dl class="result-details ${state.attackMode ? "" : "muted-details"}">
+      ${detailItems}
+    </dl>
+    ${note}
+  `;
+}
+
+function renderDieTelemetry(
+  die: ReturnType<PixelsController["getState"]>["tensDie"],
+  label: string,
+): string {
+  return `
+    <section class="telemetry-row state-${getDieStateTone(die.connectionStatus)}">
+      <div class="telemetry-head">
+        <div>
+          <p class="telemetry-label">${label}</p>
+          <p class="telemetry-name">${die.name || "Not connected"}</p>
+        </div>
+        <span class="telemetry-status">${formatStatus(die.connectionStatus as never)}</span>
+      </div>
+      <dl class="telemetry-grid">
+        <div><dt>Face</dt><dd>${formatFace(die.currentFace)}</dd></div>
+        <div><dt>Battery</dt><dd>${formatBattery(die.batteryLevel, die.isCharging)}</dd></div>
+      </dl>
+    </section>
+  `;
+}
+
+function renderToolsOverlay(
+  state: ReturnType<PixelsController["getState"]>,
+): string {
+  return `
+    <div class="tools-overlay" data-action="close-tools-backdrop">
+      <section class="tools-panel" aria-label="Tools and diagnostics">
+        <header class="tools-header">
+          <div>
+            <p class="tools-kicker">Tools</p>
+            <h2>Utility and diagnostics</h2>
+          </div>
+          <button class="ghost icon-button" data-action="toggle-tools" aria-label="Close tools">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+
+        <div class="tools-grid">
+          <section>
+            <p class="tools-label">Capabilities</p>
+            <p class="tools-copy">${escapeHtml(formatCapabilities(state.capabilities))}</p>
+          </section>
+          <section>
+            <p class="tools-label">Reconnect</p>
+            <p class="tools-copy">${escapeHtml(state.autoReconnectStatus ?? "Saved dice not configured yet.")}</p>
+          </section>
+          <section>
+            <p class="tools-label">Latest result</p>
+            <p class="tools-copy">${escapeHtml(getResultSummary(state.latestResult))}</p>
+          </section>
+          <section>
+            <p class="tools-label">Supported flow</p>
+            <p class="tools-copy">Chrome is the main browser target. Official Pixels d00 and d10 remain the supported dice path.</p>
+          </section>
+        </div>
+
+        <div class="tools-actions">
+          <button class="ghost" data-action="clear-log">Clear log</button>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderConnectionGlyph(connectionStatus: string): string {
+  const bars =
+    connectionStatus === "ready"
+      ? 3
+      : connectionStatus === "connecting" || connectionStatus === "identifying"
+        ? 2
+        : connectionStatus === "disconnecting"
+          ? 1
+          : 0;
+
+  return `
+    <span class="signal-bars" aria-hidden="true">
+      ${[1, 2, 3]
+        .map(
+          (index) =>
+            `<span class="signal-bar ${index <= bars ? "is-on" : ""}"></span>`,
+        )
+        .join("")}
+    </span>
+  `;
+}
+
+function renderBatteryGlyph(level: number | null, isCharging: boolean): string {
+  if (level === null) {
+    return '<span class="battery-glyph is-unknown"><span class="battery-shell"></span></span>';
+  }
+
+  const segments =
+    level >= 81 ? 5 : level >= 61 ? 4 : level >= 41 ? 3 : level >= 21 ? 2 : 1;
+  const tone = level <= 20 ? "is-low" : "";
+
+  return `
+    <span class="battery-glyph ${tone} ${isCharging ? "is-charging" : ""}" aria-hidden="true">
+      <span class="battery-shell">
+        ${Array.from({ length: 5 }, (_, index) => `<span class="battery-segment ${index < segments ? "is-on" : ""}"></span>`).join("")}
+      </span>
+      ${isCharging ? '<span class="battery-bolt">+</span>' : ""}
+    </span>
+  `;
+}
+
+function renderDieGlyph(label: "d00" | "d10"): string {
+  const text = label === "d00" ? "00" : "10";
+
+  return `
+    <span class="die-glyph" aria-label="${label} die">
+      <svg viewBox="0 0 40 40" role="img" aria-hidden="true">
+        <rect x="5" y="5" width="30" height="30" rx="4"></rect>
+        <path d="M12 14h16"></path>
+        <path d="M12 26h16"></path>
+        <text x="20" y="23" text-anchor="middle">${text}</text>
+      </svg>
+    </span>
+  `;
+}
+
+function getDieStateTone(connectionStatus: string): string {
+  switch (connectionStatus) {
+    case "ready":
+      return "connected";
+    case "connecting":
+    case "identifying":
+    case "disconnecting":
+      return "busy";
+    default:
+      return "idle";
+  }
 }
 
 function captureFocusState(): FocusState | null {
@@ -263,6 +508,30 @@ function bindActions() {
       void controller.disconnect();
     });
   appRoot
+    .querySelectorAll<HTMLButtonElement>('[data-action="toggle-tools"]')
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        uiState.toolsOpen = !uiState.toolsOpen;
+        render();
+      });
+    });
+  appRoot
+    .querySelector<HTMLDivElement>('[data-action="close-tools-backdrop"]')
+    ?.addEventListener("click", (event) => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+
+      uiState.toolsOpen = false;
+      render();
+    });
+  appRoot
+    .querySelector<HTMLButtonElement>('[data-action="toggle-log"]')
+    ?.addEventListener("click", () => {
+      uiState.logExpanded = !uiState.logExpanded;
+      render();
+    });
+  appRoot
     .querySelector<HTMLButtonElement>('[data-action="clear-log"]')
     ?.addEventListener("click", () => {
       controller.clearLog();
@@ -295,6 +564,11 @@ function bindActions() {
       controller.setAttackMode(true);
     });
   appRoot
+    .querySelector<HTMLButtonElement>('[data-action="toggle-opposed"]')
+    ?.addEventListener("click", () => {
+      controller.setOpposed(!controller.getState().isOpposed);
+    });
+  appRoot
     .querySelector<HTMLInputElement>('[data-action="damage-bonus"]')
     ?.addEventListener("input", (event) => {
       updateDraftField(
@@ -310,11 +584,6 @@ function bindActions() {
     .querySelector<HTMLInputElement>('[data-action="damage-bonus"]')
     ?.addEventListener("blur", () => {
       finalizeDraftField("damage-bonus", parseUnsignedDraft);
-    });
-  appRoot
-    .querySelector<HTMLInputElement>('[data-action="opposed"]')
-    ?.addEventListener("change", (event) => {
-      controller.setOpposed((event.currentTarget as HTMLInputElement).checked);
     });
   appRoot
     .querySelector<HTMLInputElement>('[data-action="defender-success-levels"]')
@@ -354,261 +623,6 @@ function bindActions() {
     ?.addEventListener("blur", () => {
       finalizeDraftField("critical-hit-location-roll", parseTargetDraft);
     });
-}
-
-function renderDieCard(
-  die: {
-    connectionStatus: string;
-    name: string;
-    currentFace: number | null;
-    batteryLevel: number | null;
-    isCharging: boolean;
-  },
-  label: string,
-): string {
-  return `
-    <section class="die-card">
-      <p class="die-label">${label}</p>
-      <p class="die-name">${die.name || "Not connected"}</p>
-      <dl>
-        <div>
-          <dt>Status</dt>
-          <dd>${formatStatus(die.connectionStatus as never)}</dd>
-        </div>
-        <div>
-          <dt>Face</dt>
-          <dd>${formatFace(die.currentFace)}</dd>
-        </div>
-        <div>
-          <dt>Battery</dt>
-          <dd>${formatBattery(die.batteryLevel, die.isCharging)}</dd>
-        </div>
-      </dl>
-    </section>
-  `;
-}
-
-function renderAttackFields(
-  state: ReturnType<PixelsController["getState"]>,
-): string {
-  const damageBonusField = getDraftFieldState(
-    "damage-bonus",
-    String(state.damageBonus),
-    parseUnsignedDraft,
-    document.activeElement instanceof HTMLInputElement &&
-      document.activeElement.dataset.action === "damage-bonus",
-  );
-  const defenderSuccessLevelsField = getDraftFieldState(
-    "defender-success-levels",
-    String(state.defenderSuccessLevels),
-    parseSignedDraft,
-    document.activeElement instanceof HTMLInputElement &&
-      document.activeElement.dataset.action === "defender-success-levels",
-  );
-
-  return `
-    <section class="attack-fields">
-      <label class="target-field compact-field">
-        <span>Damage Bonus</span>
-        <input
-          type="text"
-          value="${escapeAttribute(damageBonusField.value)}"
-          data-action="damage-bonus"
-          aria-invalid="${damageBonusField.invalid}"
-          class="${damageBonusField.invalid ? "is-invalid" : ""}"
-        />
-      </label>
-      <label class="check-field">
-        <input
-          type="checkbox"
-          ${state.isOpposed ? "checked" : ""}
-          data-action="opposed"
-        />
-        <span>Opposed Test</span>
-      </label>
-      <label class="target-field compact-field ${state.isOpposed ? "" : "disabled-field"}">
-        <span>Opponent SL</span>
-        <input
-          type="text"
-          value="${escapeAttribute(defenderSuccessLevelsField.value)}"
-          data-action="defender-success-levels"
-          aria-invalid="${defenderSuccessLevelsField.invalid}"
-          class="${defenderSuccessLevelsField.invalid ? "is-invalid" : ""}"
-          ${state.isOpposed ? "" : "disabled"}
-        />
-      </label>
-    </section>
-  `;
-}
-
-function renderAttackPanel(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): string {
-  if (!latestResult) {
-    return `
-      <section class="attack-result-panel attack-result-idle">
-        <div class="attack-result-head">
-          <p class="attack-result-title">Attack Result</p>
-        </div>
-        <dl class="attack-result-grid">
-          <div>
-            <dt>Damage</dt>
-            <dd>--</dd>
-          </div>
-          <div>
-            <dt>Hit</dt>
-            <dd>--</dd>
-          </div>
-          <div>
-            <dt>Special</dt>
-            <dd>Waiting</dd>
-          </div>
-        </dl>
-      </section>
-    `;
-  }
-
-  const tone = getAttackPanelTone(latestResult);
-  const toneLabel = getAttackPanelLabel(latestResult);
-  const hitValue =
-    latestResult.hitLocation ??
-    (latestResult.isCritical ? "Reroll Needed" : "--");
-
-  return `
-    <section class="attack-result-panel attack-result-${tone}">
-      <div class="attack-result-head">
-        <p class="attack-result-title">Attack Result</p>
-        ${toneLabel ? `<span class="attack-result-badge attack-result-badge-${tone}">${toneLabel}</span>` : ""}
-      </div>
-      <dl class="attack-result-grid">
-        <div>
-          <dt>Damage</dt>
-          <dd>${latestResult.rawDamage ?? "--"}</dd>
-        </div>
-        <div>
-          <dt>Hit</dt>
-          <dd>${hitValue}</dd>
-        </div>
-        <div>
-          <dt>Special</dt>
-          <dd>${latestResult.isCritical ? "Critical" : latestResult.isFumble ? "Fumble" : "None"}</dd>
-        </div>
-      </dl>
-      ${renderDamageFormula(latestResult)}
-      ${renderTieBreakerNotice(latestResult)}
-    </section>
-  `;
-}
-
-function renderTieBreakerNotice(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): string {
-  if (!latestResult || latestResult.resolution !== "tie-breaker") {
-    return "";
-  }
-
-  return '<p class="tie-banner">Tie on SL. Compare relevant skill or characteristic to decide winner. Attack details stay provisional until that check is done.</p>';
-}
-
-function renderDamageFormula(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): string {
-  if (!latestResult?.isAttackMode || latestResult.rawDamage === null) {
-    return "";
-  }
-
-  const formula = latestResult.isOpposed
-    ? `${latestResult.successLevels} SL + ${latestResult.damageBonus} DB - (${latestResult.defenderSuccessLevels} Opp SL) = ${latestResult.rawDamage}`
-    : `${latestResult.successLevels} SL + ${latestResult.damageBonus} DB = ${latestResult.rawDamage}`;
-
-  return `
-    <p class="result-formula">
-      <span class="formula-label">Damage Formula</span>
-      <span class="formula-value">${formula}</span>
-    </p>
-  `;
-}
-
-function getResultTone(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): "idle" | "success" | "failure" | "warning" {
-  if (!latestResult) {
-    return "idle";
-  }
-
-  if (latestResult.resolution === "tie-breaker") {
-    return "warning";
-  }
-
-  return latestResult.success ? "success" : "failure";
-}
-
-function getOutcomeLabel(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): string {
-  if (!latestResult) {
-    return "Waiting";
-  }
-
-  if (latestResult.resolution === "tie-breaker") {
-    return "Tie Break";
-  }
-
-  return latestResult.success ? "Success" : "Failure";
-}
-
-function getResultSummary(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): string {
-  if (!latestResult) {
-    return "Waiting for roll.";
-  }
-
-  if (latestResult.resolution === "tie-breaker") {
-    return `Opposed tie on ${latestResult.successLevels} SL. Compare skill or characteristic.`;
-  }
-
-  if (latestResult.success) {
-    return `Success by ${latestResult.successLevels} SL.`;
-  }
-
-  if (
-    latestResult.isAttackMode &&
-    latestResult.isOpposed &&
-    latestResult.successLevels >= 0
-  ) {
-    return "Lost opposed test. Opponent has higher SL.";
-  }
-
-  return `Failure by ${Math.abs(latestResult.successLevels)} SL.`;
-}
-
-function getAttackPanelTone(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): "idle" | "success" | "failure" | "warning" {
-  if (!latestResult) {
-    return "idle";
-  }
-
-  return getResultTone(latestResult);
-}
-
-function getAttackPanelLabel(
-  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
-): string {
-  if (!latestResult) {
-    return "";
-  }
-
-  if (latestResult.resolution === "tie-breaker") {
-    return "Tie Break";
-  }
-
-  if (latestResult.isOpposed) {
-    return "Opposed";
-  }
-
-  return "";
 }
 
 function getDraftFieldState(
@@ -682,6 +696,72 @@ function finalizeDraftField(
 
   delete fieldDrafts[action];
   render();
+}
+
+function getResultTone(
+  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
+): "idle" | "success" | "failure" | "warning" {
+  if (!latestResult) {
+    return "idle";
+  }
+
+  if (latestResult.resolution === "tie-breaker") {
+    return "warning";
+  }
+
+  return latestResult.success ? "success" : "failure";
+}
+
+function getOutcomeLabel(
+  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
+): string {
+  if (!latestResult) {
+    return "Waiting";
+  }
+
+  if (latestResult.resolution === "tie-breaker") {
+    return "Tie Break";
+  }
+
+  return latestResult.success ? "Success" : "Failure";
+}
+
+function getResultSummary(
+  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
+): string {
+  if (!latestResult) {
+    return "Waiting for roll.";
+  }
+
+  if (latestResult.resolution === "tie-breaker") {
+    return `Opposed tie on ${latestResult.successLevels} SL.`;
+  }
+
+  if (latestResult.success) {
+    return `Success by ${latestResult.successLevels} SL.`;
+  }
+
+  if (
+    latestResult.isAttackMode &&
+    latestResult.isOpposed &&
+    latestResult.successLevels >= 0
+  ) {
+    return "Lost opposed test. Opponent has higher SL.";
+  }
+
+  return `Failure by ${Math.abs(latestResult.successLevels)} SL.`;
+}
+
+function renderDamageFormulaText(
+  latestResult: ReturnType<PixelsController["getState"]>["latestResult"],
+): string {
+  if (!latestResult?.isAttackMode || latestResult.rawDamage === null) {
+    return "";
+  }
+
+  return latestResult.isOpposed
+    ? `${latestResult.successLevels} SL + ${latestResult.damageBonus} DB - (${latestResult.defenderSuccessLevels} Opp SL) = ${latestResult.rawDamage}`
+    : `${latestResult.successLevels} SL + ${latestResult.damageBonus} DB = ${latestResult.rawDamage}`;
 }
 
 function parseTargetDraft(value: string): number | null {
