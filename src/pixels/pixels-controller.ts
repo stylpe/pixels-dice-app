@@ -17,6 +17,21 @@ import {
   setPocTarget,
 } from "../wfrp/poc-session";
 import {
+  createLogEntry,
+  getConnectFailedMessage,
+  getConnectRetryMessage,
+  getDieAlreadyConnectedMessage,
+  getDieBatteryMessage,
+  getDieReadyMessage,
+  getDieRolledMessage,
+  getDieRollStateMessage,
+  getDieStatusMessage,
+  getDisconnectFailedMessage,
+  getRejectedDieTypeMessage,
+  getResultSummaryMessage,
+  getSelectedPixelMessage,
+} from "./controller-log";
+import {
   createEmptyRoleSlotPatch,
   createRolePixelPatch,
   createSyncedRolePatch,
@@ -27,7 +42,6 @@ import {
   createDetachedPixelsPatch,
   createInitialAppState,
   createSessionPatch,
-  type LogEntry,
 } from "./controller-state";
 import { type DieRole, getDieRoleFromType } from "./die-slot";
 import {
@@ -57,7 +71,7 @@ export class PixelsController {
   private pixelListeners = new Map<string, PixelEventHandlers>();
   private state: AppState = createInitialAppState(
     getBluetoothCapabilities(),
-    entry("App ready. Connect official Pixels d00 and d10 dice."),
+    createLogEntry("App ready. Connect official Pixels d00 and d10 dice."),
   );
 
   subscribe(listener: () => void): () => void {
@@ -107,7 +121,7 @@ export class PixelsController {
   }
 
   clearLog() {
-    this.patch({ eventLog: [entry("Log cleared.")] });
+    this.patch({ eventLog: [createLogEntry("Log cleared.")] });
   }
 
   async initialize() {
@@ -135,11 +149,13 @@ export class PixelsController {
     try {
       const pixel = await requestPixel();
 
-      this.addLog(`Selected ${pixel.name || "Pixels die"}.`);
+      this.addLog(getSelectedPixelMessage(pixel.name));
       await this.connectPixel(pixel, "manual");
     } catch (error) {
-      this.patch({ error: this.normalizeError(error) });
-      this.addLog(`Connect failed: ${this.normalizeError(error)}`);
+      const errorMessage = this.normalizeError(error);
+
+      this.patch({ error: errorMessage });
+      this.addLog(getConnectFailedMessage(errorMessage));
     } finally {
       this.patch({ busy: false });
     }
@@ -161,8 +177,10 @@ export class PixelsController {
       this.detachAllPixels();
       this.addLog("Disconnected dice.");
     } catch (error) {
-      this.patch({ error: this.normalizeError(error) });
-      this.addLog(`Disconnect failed: ${this.normalizeError(error)}`);
+      const errorMessage = this.normalizeError(error);
+
+      this.patch({ error: errorMessage });
+      this.addLog(getDisconnectFailedMessage(errorMessage));
     } finally {
       this.patch({ busy: false });
     }
@@ -235,7 +253,11 @@ export class PixelsController {
       retries: 3,
       onWillRetry: (delay, retriesLeft, error) => {
         this.addLog(
-          `Connect retry in ${delay}ms. ${retriesLeft} retries left. ${this.normalizeError(error)}`,
+          getConnectRetryMessage(
+            delay,
+            retriesLeft,
+            this.normalizeError(error),
+          ),
         );
       },
     });
@@ -255,15 +277,13 @@ export class PixelsController {
           session.unsupportedReason ||
           "Unsupported die type for v1. Official Pixels d10 and d00 required.",
       });
-      this.addLog(`Rejected die type ${dieType || "unknown"}.`);
+      this.addLog(getRejectedDieTypeMessage(dieType));
       return;
     }
 
     const currentPixel = getPixelForRole(this.state, role);
     if (currentPixel && currentPixel !== pixel) {
-      throw new Error(
-        `${capitalize(role)} die already connected. Disconnect first to replace it.`,
-      );
+      throw new Error(getDieAlreadyConnectedMessage(role));
     }
 
     if (currentPixel !== pixel) {
@@ -285,21 +305,17 @@ export class PixelsController {
     });
     this.patch(createSyncedRolePatch(role, pixel));
     persistDieSystemId(role, pixel.systemId);
-    this.addLog(
-      `${capitalize(role)} die ready${source === "auto" ? " (auto)." : "."}`,
-    );
+    this.addLog(getDieReadyMessage(role, source));
   }
 
   private attachPixel(role: DieRole, pixel: Pixel) {
     const onStatusChanged = () => {
       this.patch(createSyncedRolePatch(role, pixel));
-      this.addLog(`${capitalize(role)} die status ${pixel.status}.`);
+      this.addLog(getDieStatusMessage(role, pixel.status));
     };
     const onRollState = (event: PixelRollStateEvent) => {
       this.patch(createSyncedRolePatch(role, pixel));
-      this.addLog(
-        `${capitalize(role)} die ${event.state}; face ${event.face}.`,
-      );
+      this.addLog(getDieRollStateMessage(role, event.state, event.face));
     };
     const onRoll = (face: number) => {
       const session = registerPocRoll(this.state.session, {
@@ -310,19 +326,15 @@ export class PixelsController {
 
       this.applySession(session);
       this.patch(createSyncedRolePatch(role, pixel));
-      this.addLog(`${capitalize(role)} die rolled ${face}.`);
+      this.addLog(getDieRolledMessage(role, face));
 
       if (session.latestResult) {
-        this.addLog(
-          `Result ${session.latestResult.roll} vs ${session.latestResult.target}; SL ${session.latestResult.successLevels}.`,
-        );
+        this.addLog(getResultSummaryMessage(session.latestResult));
       }
     };
     const onBattery = (event: PixelBatteryEvent) => {
       this.patch(createSyncedRolePatch(role, pixel));
-      this.addLog(
-        `${capitalize(role)} die battery ${event.level}%${event.isCharging ? ", charging" : ""}.`,
-      );
+      this.addLog(getDieBatteryMessage(role, event.level, event.isCharging));
     };
 
     const handlers = attachPixelEventHandlers(pixel, {
@@ -380,7 +392,7 @@ export class PixelsController {
   }
 
   private addLog(message: string) {
-    const eventLog = [entry(message), ...this.state.eventLog].slice(
+    const eventLog = [createLogEntry(message), ...this.state.eventLog].slice(
       0,
       MAX_LOG_ENTRIES,
     );
@@ -410,18 +422,4 @@ function clampSignedNumber(value: number): number {
   }
 
   return Math.round(value);
-}
-
-function capitalize(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function entry(message: string): LogEntry {
-  const at = new Intl.DateTimeFormat([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date());
-
-  return { at, message };
 }
