@@ -45,6 +45,19 @@ pnpm playwright:install
 pnpm test:e2e
 ```
 
+## Deploy To Cloudflare Pages
+
+Deploy facts for this app:
+
+```bash
+pnpm full-validate
+git push
+```
+
+Cloudflare Pages builds from `main` and serves production at `dice.supermikal.no`.
+HTTPS comes from Pages, which is required for Web Bluetooth outside `localhost`.
+No backend or Pages Functions are used.
+
 ## Debug In Chrome
 
 - Use VS Code Run and Debug with `Chrome: Launch Pixels App`.
