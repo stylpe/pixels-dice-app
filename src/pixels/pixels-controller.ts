@@ -1,5 +1,4 @@
 import {
-  type BluetoothCapabilities,
   getBluetoothCapabilities,
   getPixel,
   type Pixel,
@@ -7,8 +6,6 @@ import {
   requestPixel,
 } from "@systemic-games/pixels-web-connect";
 import {
-  createPocSessionState,
-  type PocResult,
   type PocSessionState,
   registerPocDie,
   registerPocRoll,
@@ -19,6 +16,13 @@ import {
   setOpposed,
   setPocTarget,
 } from "../wfrp/poc-session";
+import {
+  type AppState,
+  createDetachedPixelsPatch,
+  createInitialAppState,
+  createSessionPatch,
+  type LogEntry,
+} from "./controller-state";
 import {
   createEmptyDieSlot,
   type DieRole,
@@ -46,51 +50,15 @@ import {
   readSavedDiceIds,
 } from "./reconnect";
 
-type LogEntry = {
-  at: string;
-  message: string;
-};
-
-type AppState = {
-  busy: boolean;
-  capabilities: BluetoothCapabilities;
-  autoReconnectStatus: string | null;
-  target: number;
-  attackMode: boolean;
-  damageBonus: number;
-  isOpposed: boolean;
-  defenderSuccessLevels: number;
-  criticalHitLocationRoll: number | null;
-  session: PocSessionState;
-  latestResult: PocResult | null;
-  tensDie: DieSlotState;
-  unitsDie: DieSlotState;
-  eventLog: LogEntry[];
-  error: string | null;
-};
-
 const MAX_LOG_ENTRIES = 14;
 
 export class PixelsController {
   private listeners = new Set<() => void>();
   private pixelListeners = new Map<string, PixelEventHandlers>();
-  private state: AppState = {
-    busy: false,
-    capabilities: getBluetoothCapabilities(),
-    autoReconnectStatus: null,
-    target: 50,
-    attackMode: false,
-    damageBonus: 0,
-    isOpposed: false,
-    defenderSuccessLevels: 0,
-    criticalHitLocationRoll: null,
-    session: createPocSessionState(),
-    latestResult: null,
-    tensDie: createEmptyDieSlot("tens"),
-    unitsDie: createEmptyDieSlot("units"),
-    eventLog: [entry("App ready. Connect official Pixels d00 and d10 dice.")],
-    error: null,
-  };
+  private state: AppState = createInitialAppState(
+    getBluetoothCapabilities(),
+    entry("App ready. Connect official Pixels d00 and d10 dice."),
+  );
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -373,17 +341,7 @@ export class PixelsController {
   private detachAllPixels() {
     this.detachRole("tens");
     this.detachRole("units");
-    this.patch({
-      session: createPocSessionState(),
-      latestResult: null,
-      target: 50,
-      attackMode: false,
-      damageBonus: 0,
-      isOpposed: false,
-      defenderSuccessLevels: 0,
-      criticalHitLocationRoll: null,
-      error: null,
-    });
+    this.patch(createDetachedPixelsPatch());
   }
 
   private detachRole(role: DieRole) {
@@ -439,17 +397,7 @@ export class PixelsController {
     session: PocSessionState,
     patch: Partial<AppState> = {},
   ) {
-    this.patch({
-      session,
-      target: session.target,
-      attackMode: session.attack.enabled,
-      damageBonus: session.attack.damageBonus,
-      isOpposed: session.attack.isOpposed,
-      defenderSuccessLevels: session.attack.defenderSuccessLevels,
-      criticalHitLocationRoll: session.attack.criticalHitLocationRoll,
-      latestResult: session.latestResult,
-      ...patch,
-    });
+    this.patch(createSessionPatch(session, patch));
   }
 
   private emit() {

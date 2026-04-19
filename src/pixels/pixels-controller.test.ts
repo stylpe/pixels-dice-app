@@ -66,6 +66,12 @@ class FakePixel {
     this.listeners.get(event)?.delete(listener);
   }
 
+  emit(event: string, ...args: Array<unknown>) {
+    for (const listener of this.listeners.get(event) ?? []) {
+      listener(...args);
+    }
+  }
+
   async disconnect() {
     this.status = "disconnected";
   }
@@ -155,5 +161,45 @@ describe("pixels controller autoconnect", () => {
     expect(controller.getState().autoReconnectStatus).toBe(
       "Auto-reconnect unavailable until persistent Bluetooth permissions are supported.",
     );
+  });
+
+  it("disconnect resets connected dice and session state", async () => {
+    const tens = new FakePixel("tens-1", "d00", "Tens");
+    const units = new FakePixel("units-1", "d10", "Units");
+
+    mockRequestPixel.mockResolvedValueOnce(tens).mockResolvedValueOnce(units);
+
+    const controller = new PixelsController();
+
+    await controller.connect();
+    await controller.connect();
+
+    controller.setTarget(63);
+    controller.setAttackMode(true);
+    controller.setAttackDamageBonus(4);
+    controller.setOpposed(true);
+    controller.setDefenderSuccessLevels(2);
+    controller.setCriticalHitLocationRoll(11);
+
+    tens.emit("roll", 70);
+    units.emit("roll", 4);
+
+    expect(controller.getState().latestResult?.roll).toBe(74);
+
+    await controller.disconnect();
+
+    const state = controller.getState();
+
+    expect(state.tensDie.pixel).toBeNull();
+    expect(state.unitsDie.pixel).toBeNull();
+    expect(state.target).toBe(50);
+    expect(state.attackMode).toBe(false);
+    expect(state.damageBonus).toBe(0);
+    expect(state.isOpposed).toBe(false);
+    expect(state.defenderSuccessLevels).toBe(0);
+    expect(state.criticalHitLocationRoll).toBeNull();
+    expect(state.latestResult).toBeNull();
+    expect(state.error).toBeNull();
+    expect(state.eventLog[0]?.message).toBe("Disconnected dice.");
   });
 });
