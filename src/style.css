@@ -207,18 +207,52 @@ input[aria-invalid="true"] {
 .die-glyph svg {
   width: 100%;
   height: 100%;
-  fill: rgba(255, 255, 255, 0.28);
+  overflow: visible;
+}
+
+.die-glyph .die-side-face {
+  fill: rgba(255, 255, 255, 0.05);
   stroke: currentColor;
-  stroke-width: 1.65;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
+}
+
+.die-glyph .die-face {
+  fill: rgba(255, 255, 255, 0.12);
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.die-glyph .die-bottom-seams {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
 }
 
 .die-glyph text {
   fill: currentColor;
   stroke: none;
-  font-size: 11px;
+  font-size: 11.5px;
   font-family: var(--display);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.03em;
+}
+
+.die-glyph.is-single text {
+  font-size: 14.8px;
+  letter-spacing: 0.01em;
+}
+
+.die-glyph.is-double text {
+  font-size: 11.2px;
+  letter-spacing: 0.02em;
 }
 
 .signal-bars {
@@ -701,6 +735,14 @@ input[aria-invalid="true"] {
   }
 
   .die-glyph text {
+    font-size: 12.5px;
+  }
+
+  .die-glyph.is-single text {
+    font-size: 15.6px;
+  }
+
+  .die-glyph.is-double text {
     font-size: 12px;
   }
 
