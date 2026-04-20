@@ -32,5 +32,7 @@ describe("format helpers", () => {
     expect(formatBattery(87, true)).toBe("87% charging");
     expect(formatFace(null)).toBe("--");
     expect(formatFace(20)).toBe("20");
+    expect(formatFace(0, "d00")).toBe("00");
+    expect(formatFace(0, "d10")).toBe("0");
   });
 });
