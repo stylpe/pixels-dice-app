@@ -166,10 +166,7 @@ function render() {
         </section>
 
         <section class="lower-deck">
-          <section class="dice-telemetry">
-            ${renderDieTelemetry(state.tensDie, "Tens d00")}
-            ${renderDieTelemetry(state.unitsDie, "Units d10")}
-          </section>
+          ${renderDiceTelemetry(state)}
 
           <section class="log-section ${uiState.logExpanded ? "is-open" : ""}">
             <button class="log-toggle" data-action="toggle-log">
@@ -321,25 +318,86 @@ function renderResultDetails(
   `;
 }
 
-function renderDieTelemetry(
+function renderDiceTelemetry(
+  state: ReturnType<PixelsController["getState"]>,
+): string {
+  return `
+    <section class="dice-telemetry" aria-label="Connected dice status">
+      <div class="telemetry-columns" aria-hidden="true">
+        <span><span class="telemetry-label-long">Die</span><span class="telemetry-label-short">Die</span></span>
+        <span><span class="telemetry-label-long">Name</span><span class="telemetry-label-short">Name</span></span>
+        <span><span class="telemetry-label-long">Face</span><span class="telemetry-label-short">Face</span></span>
+        <span><span class="telemetry-label-long">Battery</span><span class="telemetry-label-short">Batt</span></span>
+        <span><span class="telemetry-label-long">Status</span><span class="telemetry-label-short">State</span></span>
+      </div>
+      ${renderDieTelemetryRow(state.tensDie, "Tens d00")}
+      ${renderDieTelemetryRow(state.unitsDie, "Units d10")}
+    </section>
+  `;
+}
+
+function renderDieTelemetryRow(
   die: ReturnType<PixelsController["getState"]>["tensDie"],
   label: string,
 ): string {
+  const status = formatStatus(die.connectionStatus as never);
+  const compactStatus = formatCompactTelemetryStatus(die.connectionStatus);
+  const battery = formatBattery(die.batteryLevel, die.isCharging);
+  const compactBattery = formatCompactTelemetryBattery(
+    die.batteryLevel,
+    die.isCharging,
+  );
+
   return `
     <section class="telemetry-row state-${getDieStateTone(die.connectionStatus)}">
-      <div class="telemetry-head">
-        <div>
-          <p class="telemetry-label">${label}</p>
-          <p class="telemetry-name">${die.name || "Not connected"}</p>
-        </div>
-        <span class="telemetry-status">${formatStatus(die.connectionStatus as never)}</span>
+      <div class="telemetry-cell telemetry-kind">
+        <span class="telemetry-cell-label">Die</span>
+        <p class="telemetry-label">${label}</p>
       </div>
-      <dl class="telemetry-grid">
-        <div><dt>Face</dt><dd>${formatFace(die.currentFace)}</dd></div>
-        <div><dt>Battery</dt><dd>${formatBattery(die.batteryLevel, die.isCharging)}</dd></div>
-      </dl>
+      <div class="telemetry-cell telemetry-name-cell">
+        <span class="telemetry-cell-label">Name</span>
+        <p class="telemetry-name">${die.name || "Not connected"}</p>
+      </div>
+      <div class="telemetry-cell telemetry-metric">
+        <span class="telemetry-cell-label">Face</span>
+        <p class="telemetry-value">${formatFace(die.currentFace)}</p>
+      </div>
+      <div class="telemetry-cell telemetry-metric">
+        <span class="telemetry-cell-label">Battery</span>
+        <p class="telemetry-value" title="${escapeHtml(battery)}">${compactBattery}</p>
+      </div>
+      <div class="telemetry-cell telemetry-status-cell">
+        <span class="telemetry-cell-label">Status</span>
+        <p class="telemetry-status" title="${escapeHtml(status)}">${compactStatus}</p>
+      </div>
     </section>
   `;
+}
+
+function formatCompactTelemetryStatus(connectionStatus: string): string {
+  switch (connectionStatus) {
+    case "connecting":
+      return "Linking";
+    case "identifying":
+      return "ID";
+    case "ready":
+      return "Ready";
+    case "disconnecting":
+      return "Closing";
+    default:
+      return "Offline";
+  }
+}
+
+function formatCompactTelemetryBattery(
+  level: number | null,
+  isCharging: boolean,
+): string {
+  if (level === null) {
+    return "--";
+  }
+
+  return `${level}%${isCharging ? "+" : ""}`;
 }
 
 function renderToolsOverlay(
