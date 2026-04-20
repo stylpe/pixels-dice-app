@@ -356,11 +356,11 @@ function renderDieTelemetryRow(
       </div>
       <div class="telemetry-cell telemetry-name-cell">
         <span class="telemetry-cell-label">Name</span>
-        <p class="telemetry-name">${die.name || "Not connected"}</p>
+        <p class="telemetry-name">${die.name || "--"}</p>
       </div>
       <div class="telemetry-cell telemetry-metric">
         <span class="telemetry-cell-label">Face</span>
-        <p class="telemetry-value">${formatFace(die.currentFace)}</p>
+        <p class="telemetry-value">${formatFace(die.currentFace, die.dieType)}</p>
       </div>
       <div class="telemetry-cell telemetry-metric">
         <span class="telemetry-cell-label">Battery</span>

@@ -43,7 +43,7 @@ export function toDieSlotState(role: DieRole, pixel: Pixel): DieSlotState {
     role,
     pixel,
     connectionStatus: pixel.status,
-    currentFace: pixel.currentFace || null,
+    currentFace: pixel.currentFace ?? null,
     batteryLevel: pixel.batteryLevel,
     isCharging: pixel.isCharging,
     name: pixel.name,

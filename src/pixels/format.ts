@@ -43,9 +43,16 @@ export function formatBattery(
   return `${level}%${isCharging ? " charging" : ""}`;
 }
 
-export function formatFace(face: number | null): string {
+export function formatFace(
+  face: number | null,
+  dieType?: string | null,
+): string {
   if (face === null) {
     return "--";
+  }
+
+  if (dieType === "d00" && face === 0) {
+    return "00";
   }
 
   return String(face);
