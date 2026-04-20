@@ -427,15 +427,17 @@ function renderBatteryGlyph(level: number | null, isCharging: boolean): string {
 }
 
 function renderDieGlyph(label: "d00" | "d10"): string {
-  const text = label === "d00" ? "00" : "10";
+  const text = label === "d00" ? "00" : "0";
+  const faceClass = label === "d00" ? "is-double" : "is-single";
 
   return `
-    <span class="die-glyph" aria-label="${label} die">
-      <svg viewBox="0 0 40 40" role="img" aria-hidden="true">
-        <rect x="5" y="5" width="30" height="30" rx="4"></rect>
-        <path d="M12 14h16"></path>
-        <path d="M12 26h16"></path>
-        <text x="20" y="23" text-anchor="middle">${text}</text>
+    <span class="die-glyph ${faceClass}" aria-label="${label} die">
+      <svg viewBox="0 0 48 48" role="img" aria-hidden="true">
+        <path class="die-side-face" d="M24 6.5 10 22 8 26 12.5 27"></path>
+        <path class="die-side-face" d="M24 6.5 38 22 40 26 35.5 27"></path>
+        <path class="die-face" d="M24 6.5 35.5 27 24 33 12.5 27Z"></path>
+        <path class="die-bottom-seams" d="M8 26 24 38 M24 33 24 38 M40 26 24 38"></path>
+        <text x="24" y="24.9" text-anchor="middle" dominant-baseline="middle">${text}</text>
       </svg>
     </span>
   `;
